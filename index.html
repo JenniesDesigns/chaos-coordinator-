@@ -206,7 +206,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.1 · Live Dashboard fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.2 · Startup fix</div>
   </div>
 </div>
 
@@ -474,6 +474,7 @@ document.querySelectorAll('.focuscheck').forEach(c=>c.addEventListener('change',
 let currentUser = null;
 let events = [];
 let goals = [];
+let chores = [];
 const eventForm=document.getElementById("eventForm"), goalForm=document.getElementById("goalForm");
 const today=new Date(); const localDate=new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
 document.getElementById("eventDate").value=localDate;
@@ -636,7 +637,7 @@ function renderDashboard(){
   const copy=document.getElementById("dashboardRoomCopy");
   if(focus){
     const r=rotationFocus();focus.textContent=r||"No focus room";
-    if(copy&&r){const n=chores.filter(c=>taskRoom(c).toLowerCase()===r.toLowerCase()).length;copy.textContent=n?n+" chore"+(n===1?"":"s")+" linked to this area. One room at a time.":"No chores linked here yet. Add some whenever you're ready."}
+    if(copy&&r){const n=safeChores.filter(c=>taskRoom(c).toLowerCase()===r.toLowerCase()).length;copy.textContent=n?n+" chore"+(n===1?"":"s")+" linked to this area. One room at a time.":"No chores linked here yet. Add some whenever you're ready."}
   }
 
   const ev=document.getElementById("dashboardEvents");
@@ -678,7 +679,6 @@ function renderDashboard(){
   }
 }
 // ---- Housekeeping / recurring chores + rooms (v7.2) ----
-let chores=[];
 let choreFilter="all";
 const defaultRooms=["Laundry area","Guest room / workout room","Kitchen","Downstairs bathroom","Dining room","Living room","Living room closet","Hallway / stairs","Upstairs bathroom","Office","Bedroom"];
 let rooms=JSON.parse(localStorage.getItem("cc_rooms_v72")||"null")||defaultRooms.slice();
