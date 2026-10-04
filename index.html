@@ -178,6 +178,14 @@ input,select,textarea,button{max-width:100%}
 .savings-plan .plan-line{margin-top:5px}.savings-plan strong{font-size:1.06rem}
 .savings-milestones{display:flex;justify-content:space-between;gap:6px;margin-top:8px;font-size:.78rem;opacity:.78}
 .savings-milestones .reached{font-weight:800;opacity:1}
+</style><style>
+.savings-plan{padding:8px 10px!important;margin-top:7px!important;font-size:.88rem;line-height:1.25}
+.savings-plan .plan-line{margin-top:3px!important}
+.savings-plan strong{font-size:.98rem!important}
+.savings-milestones{margin-top:6px!important;font-size:.72rem!important}
+#savingsList .entry{align-items:flex-start}
+#savingsList .entry-main>strong{font-size:1rem}
+#savingsList .entry-main>small{font-size:.78rem}
 </style></head>
 <body>
 
@@ -210,7 +218,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.2.2 · Savings Paycheck Planner</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.3 · Planning Cleanup</div>
   </div>
 </div>
 
@@ -433,7 +441,10 @@ input,select,textarea,button{max-width:100%}
         <div class="stat"><span>Take-home</span><strong id="paydayIncome">$0.00</strong></div>
         <div class="stat"><span>Bills before payday</span><strong id="paydayBillsTotal">$0.00</strong></div>
         <div class="stat"><span>After bills</span><strong id="paydayRemaining">$0.00</strong></div>
+        <div class="stat"><span>Savings plans</span><strong id="paydaySavingsTotal">$0.00</strong></div>
+        <div class="stat"><span>Left after plans</span><strong id="paydayAfterPlans">$0.00</strong></div>
       </div>
+      <div id="paydaySavingsList" class="empty" style="margin-bottom:12px">No paycheck savings planned yet. ✦</div>
       <div id="paydayBillList" class="empty">Nothing due before payday. The money goblin approves. ✦</div>
     </div>
   </div>
@@ -498,6 +509,7 @@ input,select,textarea,button{max-width:100%}
       <label class="field">Target amount<input id="savingsTarget" required type="number" min="0" step="0.01" placeholder="0.00"></label>
       <label class="field">Current amount<input id="savingsCurrent" type="number" min="0" step="0.01" value="0"></label>
       <label class="field">Target date <span style="font-weight:400">(optional)</span><input id="savingsTargetDate" type="date"></label>
+      <label class="field">Funds from each paycheck <span style="font-weight:400">(optional)</span><input id="savingsPerPaycheck" type="number" min="0" step="0.01" value="0" placeholder="0.00"></label>
       <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="savingsNotes" rows="2"></textarea></label>
       <button class="primary" type="submit">＋ Add savings goal</button>
     </form>
@@ -511,6 +523,7 @@ input,select,textarea,button{max-width:100%}
         <label class="field">What is it? <input id="eventTitle" required maxlength="100" placeholder="e.g., Dentist appointment"></label>
         <label class="field">Date <input id="eventDate" type="date" required></label>
         <label class="field">Time <input id="eventTime" type="time"></label>
+        <label class="field">Location <span style="font-weight:400">(optional)</span><input id="eventLocation" maxlength="160" placeholder="e.g., Dentist office"></label>
         <button class="primary" type="submit">＋ Add to calendar</button>
       </form>
     </div>
@@ -653,6 +666,34 @@ input,select,textarea,button{max-width:100%}
     </form>
   </div>
 </div>
+<div class="cc-modal" id="eventEditModal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2>Edit event</h2>
+    <form id="eventEditForm" class="formgrid">
+      <input id="editEventId" type="hidden">
+      <label class="field">What is it?<input id="editEventTitle" required maxlength="100"></label>
+      <label class="field">Date<input id="editEventDate" required type="date"></label>
+      <label class="field">Time<input id="editEventTime" type="time"></label>
+      <label class="field">Location <span style="font-weight:400">(optional)</span><input id="editEventLocation" maxlength="160"></label>
+      <div class="cc-modal-actions"><button id="cancelEventEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
+    </form>
+  </div>
+</div>
+<div class="cc-modal" id="savingsEditModal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2>Edit savings goal</h2>
+    <form id="savingsEditForm" class="formgrid">
+      <input id="editSavingsId" type="hidden">
+      <label class="field">Goal name<input id="editSavingsName" required maxlength="120"></label>
+      <label class="field">Target amount<input id="editSavingsTarget" required type="number" min="0" step="0.01"></label>
+      <label class="field">Current amount<input id="editSavingsCurrent" required type="number" min="0" step="0.01"></label>
+      <label class="field">Target date<input id="editSavingsTargetDate" type="date"></label>
+      <label class="field">Funds from each paycheck<input id="editSavingsPerPaycheck" type="number" min="0" step="0.01" value="0"></label>
+      <label class="field" style="grid-column:1/-1">Notes<textarea id="editSavingsNotes" rows="2"></textarea></label>
+      <div class="cc-modal-actions"><button id="cancelSavingsEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
+    </form>
+  </div>
+</div>
 <div class="cc-modal" id="moneyAdjustModal" aria-hidden="true">
   <div class="cc-modal-card">
     <h2 id="moneyAdjustTitle">Update amount</h2>
@@ -773,28 +814,40 @@ function prettyDate(value){if(!value)return "";return new Date(value+"T12:00:00"
 
 function renderEvents(){
   const list=document.getElementById("eventList");
-  events.sort((a,b)=>((a.event_date||"")+(a.event_time||"")).localeCompare((b.event_date||"")+(b.event_time||"")));
-  document.getElementById("eventCount").textContent=events.length+" event"+(events.length===1?"":"s");
+  const today=new Date();today.setHours(0,0,0,0);
+  const through=new Date(today);through.setDate(through.getDate()+30);through.setHours(23,59,59,999);
+  const upcoming=events.filter(e=>{const d=savingsDateOnly(e.event_date);return d&&d>=today&&d<=through})
+    .sort((a,b)=>((a.event_date||"")+(a.event_time||"")).localeCompare((b.event_date||"")+(b.event_time||"")));
+  document.getElementById("eventCount").textContent=upcoming.length+" event"+(upcoming.length===1?"":"s")+" · next 30 days";
   list.innerHTML="";
-  if(!events.length){list.className="empty";list.textContent="Your appointments and plans will show up here.";return}
+  if(!upcoming.length){list.className="empty";list.textContent="Nothing coming up in the next 30 days. The goblin approves. ✦";return}
   list.className="";
-  events.forEach(e=>{
+  upcoming.forEach(e=>{
     const row=document.createElement("div");row.className="entry";
     const main=document.createElement("div");main.className="entry-main";
     const title=document.createElement("strong");title.textContent=e.title;
     const detail=document.createElement("small");
-    detail.textContent=prettyDate(e.event_date)+(e.event_time?" · "+new Date("2000-01-01T"+e.event_time).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):" · Time not set");
+    detail.textContent=prettyDate(e.event_date)+(e.event_time?" · "+new Date("2000-01-01T"+e.event_time).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):" · Time not set")+(e.location?" · 📍 "+e.location:"");
     main.append(title,detail);
-    const del=document.createElement("button");del.className="entry-action";del.textContent="Remove";
-    del.addEventListener("click",async()=>{
-      try{
-        await supabaseRequest("/rest/v1/events?id=eq."+encodeURIComponent(e.id),{method:"DELETE"});
-        events=events.filter(x=>x.id!==e.id);renderEvents();toast("Event removed.");
-      }catch(err){console.error(err);toast("Couldn't remove that event.");}
-    });
-    row.append(main,del);list.append(row);
+    const actions=document.createElement("div");actions.className="chore-actions";
+    const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openEventEdit(e));
+    const del=document.createElement("button");del.type="button";del.textContent="Remove";
+    del.addEventListener("click",async()=>{try{await supabaseRequest("/rest/v1/events?id=eq."+encodeURIComponent(e.id),{method:"DELETE"});events=events.filter(x=>x.id!==e.id);renderEvents();toast("Event removed.")}catch(err){console.error(err);toast("Couldn't remove that event.")}});
+    actions.append(edit,del);row.append(main,actions);list.append(row);
   });
 }
+function openEventEdit(e){
+  document.getElementById("editEventId").value=e.id;document.getElementById("editEventTitle").value=e.title||"";document.getElementById("editEventDate").value=e.event_date||"";document.getElementById("editEventTime").value=e.event_time||"";document.getElementById("editEventLocation").value=e.location||"";
+  const m=document.getElementById("eventEditModal");m.classList.add("open");m.setAttribute("aria-hidden","false");
+}
+function closeEventEdit(){const m=document.getElementById("eventEditModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
+document.getElementById("cancelEventEdit").addEventListener("click",closeEventEdit);
+document.getElementById("eventEditModal").addEventListener("click",e=>{if(e.target.id==="eventEditModal")closeEventEdit()});
+document.getElementById("eventEditForm").addEventListener("submit",async e=>{
+  e.preventDefault();const id=document.getElementById("editEventId").value;
+  const payload={title:document.getElementById("editEventTitle").value.trim(),event_date:document.getElementById("editEventDate").value,event_time:document.getElementById("editEventTime").value||null,location:document.getElementById("editEventLocation").value.trim()||null};
+  try{await supabaseRequest("/rest/v1/events?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeEventEdit();await loadEvents();toast("Event updated. ✦")}catch(err){console.error(err);toast("Couldn't update that event.")}
+});
 
 async function loadEvents(){
   try{
@@ -861,11 +914,12 @@ eventForm.addEventListener("submit",async e=>{
   const title=document.getElementById("eventTitle").value.trim();
   const date=document.getElementById("eventDate").value;
   const time=document.getElementById("eventTime").value||null;
+  const location=document.getElementById("eventLocation").value.trim()||null;
   try{
     const data=await supabaseRequest("/rest/v1/events",{
       method:"POST",
       headers:{"Prefer":"return=representation","Accept":"application/json"},
-      body:JSON.stringify({user_id:currentUser.id,title,event_date:date,event_time:time})
+      body:JSON.stringify({user_id:currentUser.id,title,event_date:date,event_time:time,location})
     });
     if(Array.isArray(data)&&data[0]) events.push(data[0]);
     eventForm.reset();
@@ -1485,7 +1539,7 @@ document.getElementById("debtForm").addEventListener("submit",async e=>{
 async function removeDebt(d){if(!confirm("Remove "+d.name+"?"))return;try{await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(d.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadDebts();toast("Debt removed.")}catch(err){console.error(err);toast("Couldn't remove that debt.")}}
 
 async function loadSavings(){
-  try{const data=await supabaseRequest("/rest/v1/savings?select=*&order=created_at.asc",{headers:{"Accept":"application/json"}});savingsGoals=Array.isArray(data)?data:[];renderSavings()}
+  try{const data=await supabaseRequest("/rest/v1/savings?select=*&order=created_at.asc",{headers:{"Accept":"application/json"}});savingsGoals=Array.isArray(data)?data:[];renderSavings();if(typeof renderPayday==="function")renderPayday()}
   catch(err){console.error(err);toast("Couldn't load savings goals.")}
 }
 
@@ -1519,19 +1573,23 @@ function savingsPaychecksUntil(target){
 }
 function savingsPlanElement(g){
   const box=document.createElement("div");box.className="savings-plan";
-  const target=Number(g.target_amount||0),current=Number(g.current_amount||0),left=Math.max(0,target-current),percent=target>0?Math.min(100,Math.max(0,current/target*100)):0;
+  const target=Number(g.target_amount||0),current=Number(g.current_amount||0),left=Math.max(0,target-current),percent=target>0?Math.min(100,Math.max(0,current/target*100)):0,chosen=Number(g.per_paycheck_amount||0);
   let html="";
-  if(target>0&&left<=0)html=`<div class="plan-line"><strong>🎉 Goal reached!</strong></div><div class="plan-line">You funded the whole ${money(target)}.</div>`;
-  else if(!g.target_date)html=`<div class="plan-line"><strong>${money(left)} to go</strong></div><div class="plan-line">Add a target date and I'll turn this into a per-paycheck plan. ✦</div>`;
+  if(target>0&&left<=0)html=`<div class="plan-line"><strong>🎉 Goal reached!</strong> ${money(target)} funded.</div>`;
   else{
-    const end=savingsDateOnly(g.target_date),today=new Date();today.setHours(12,0,0,0);
-    if(end<today)html=`<div class="plan-line"><strong>${money(left)} to go</strong></div><div class="plan-line">Target date has passed — choose a new date and I'll recalculate. ✦</div>`;
-    else if(!paydaySettings?.next_payday)html=`<div class="plan-line"><strong>${money(left)} to go</strong></div><div class="plan-line">Finish Payday View setup to see the per-paycheck amount. ✦</div>`;
-    else{const n=savingsPaychecksUntil(g.target_date);html=n>0?`<div class="plan-line"><strong>${money(left)} to go</strong></div><div class="plan-line">${n} paycheck${n===1?"":"s"} remaining</div><div class="plan-line"><strong>Save ${money(left/n)} per paycheck</strong> to reach this goal by ${prettyDate(g.target_date)}.</div>`:`<div class="plan-line"><strong>${money(left)} to go</strong></div><div class="plan-line">No paychecks fall before this target date. Try a later date. ✦</div>`}
+    html=`<div class="plan-line"><strong>${money(left)} to go</strong></div>`;
+    if(g.target_date&&paydaySettings?.next_payday){
+      const end=savingsDateOnly(g.target_date),today=new Date();today.setHours(12,0,0,0);
+      if(end<today)html+=`<div class="plan-line">Target date passed — edit it to recalculate.</div>`;
+      else{const n=savingsPaychecksUntil(g.target_date);if(n>0){const needed=left/n;html+=`<div class="plan-line">🎯 Needed: <strong>${money(needed)}/paycheck</strong> · ${n} paycheck${n===1?"":"s"} left</div>`}}
+    }else if(g.target_date&&!paydaySettings?.next_payday)html+=`<div class="plan-line">Finish Payday View to calculate target pace.</div>`;
+    else html+=`<div class="plan-line">Add a target date to calculate target pace.</div>`;
+    html+=`<div class="plan-line">💰 Your plan: <strong>${money(chosen)}/paycheck</strong></div>`;
   }
-  if(target>0){html+=`<div class="savings-milestones">${[25,50,75,100].map(x=>`<span class="${percent>=x?"reached":""}">${x===100?"GOAL!":x+"%"}${percent>=x?" ✓":""}</span>`).join("")}</div>`}
+  if(target>0)html+=`<div class="savings-milestones">${[25,50,75,100].map(x=>`<span class="${percent>=x?"reached":""}">${x===100?"GOAL!":x+"%"}${percent>=x?" ✓":""}</span>`).join("")}</div>`;
   box.innerHTML=html;return box;
 }
+
 function renderSavings(){
   const total=savingsGoals.reduce((s,g)=>s+Number(g.current_amount||0),0);
   document.getElementById("savingsTotal").textContent=money(total);
@@ -1549,13 +1607,26 @@ function renderSavings(){
     const actions=document.createElement("div");actions.className="chore-actions";
     const add=document.createElement("button");add.type="button";add.textContent="+ Add Money";add.addEventListener("click",()=>openMoneyAdjust("savings",g.id,"add","Add to "+g.name,"Amount to add"));
     const withdraw=document.createElement("button");withdraw.type="button";withdraw.textContent="− Withdraw";withdraw.addEventListener("click",()=>openMoneyAdjust("savings",g.id,"subtract","Withdraw from "+g.name,"Amount to withdraw"));
+    const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openSavingsEdit(g));
     const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeSavings(g));
-    actions.append(add,withdraw,del);row.append(main,actions);list.append(row);
+    actions.append(add,withdraw,edit,del);row.append(main,actions);list.append(row);
   });
 }
 document.getElementById("savingsForm").addEventListener("submit",async e=>{
-  e.preventDefault();const payload={user_id:currentUser.id,name:document.getElementById("savingsName").value.trim(),target_amount:Number(document.getElementById("savingsTarget").value),current_amount:Number(document.getElementById("savingsCurrent").value||0),target_date:document.getElementById("savingsTargetDate").value||null,notes:document.getElementById("savingsNotes").value.trim(),updated_at:new Date().toISOString()};
-  try{await supabaseRequest("/rest/v1/savings",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});e.target.reset();document.getElementById("savingsCurrent").value="0";await loadSavings();toast("Savings goal added. ✦")}catch(err){console.error(err);toast("Couldn't add that savings goal.")}
+  e.preventDefault();const payload={user_id:currentUser.id,name:document.getElementById("savingsName").value.trim(),target_amount:Number(document.getElementById("savingsTarget").value),current_amount:Number(document.getElementById("savingsCurrent").value||0),target_date:document.getElementById("savingsTargetDate").value||null,per_paycheck_amount:Number(document.getElementById("savingsPerPaycheck").value||0),notes:document.getElementById("savingsNotes").value.trim(),updated_at:new Date().toISOString()};
+  try{await supabaseRequest("/rest/v1/savings",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});e.target.reset();document.getElementById("savingsCurrent").value="0";document.getElementById("savingsPerPaycheck").value="0";await loadSavings();renderPayday();toast("Savings goal added. ✦")}catch(err){console.error(err);toast("Couldn't add that savings goal.")}
+});
+function openSavingsEdit(g){
+  document.getElementById("editSavingsId").value=g.id;document.getElementById("editSavingsName").value=g.name||"";document.getElementById("editSavingsTarget").value=Number(g.target_amount||0);document.getElementById("editSavingsCurrent").value=Number(g.current_amount||0);document.getElementById("editSavingsTargetDate").value=g.target_date||"";document.getElementById("editSavingsPerPaycheck").value=Number(g.per_paycheck_amount||0);document.getElementById("editSavingsNotes").value=g.notes||"";
+  const m=document.getElementById("savingsEditModal");m.classList.add("open");m.setAttribute("aria-hidden","false");
+}
+function closeSavingsEdit(){const m=document.getElementById("savingsEditModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
+document.getElementById("cancelSavingsEdit").addEventListener("click",closeSavingsEdit);
+document.getElementById("savingsEditModal").addEventListener("click",e=>{if(e.target.id==="savingsEditModal")closeSavingsEdit()});
+document.getElementById("savingsEditForm").addEventListener("submit",async e=>{
+  e.preventDefault();const id=document.getElementById("editSavingsId").value;
+  const payload={name:document.getElementById("editSavingsName").value.trim(),target_amount:Number(document.getElementById("editSavingsTarget").value),current_amount:Number(document.getElementById("editSavingsCurrent").value||0),target_date:document.getElementById("editSavingsTargetDate").value||null,per_paycheck_amount:Number(document.getElementById("editSavingsPerPaycheck").value||0),notes:document.getElementById("editSavingsNotes").value.trim(),updated_at:new Date().toISOString()};
+  try{await supabaseRequest("/rest/v1/savings?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeSavingsEdit();await loadSavings();renderPayday();toast("Savings goal updated. ✦")}catch(err){console.error(err);toast("Couldn't update that savings goal.")}
 });
 async function removeSavings(g){if(!confirm("Remove "+g.name+"?"))return;try{await supabaseRequest("/rest/v1/savings?id=eq."+encodeURIComponent(g.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadSavings();toast("Savings goal removed.")}catch(err){console.error(err);toast("Couldn't remove that savings goal.")}}
 
@@ -1659,11 +1730,18 @@ function renderPayday(){
   if(!next){setup.style.display="";summary.style.display="none";return}
   setup.style.display="none";summary.style.display="";
   const items=paydayBillsThrough(next),total=items.reduce((s,b)=>s+Number(b.amount||0),0),income=Number(paydaySettings.usual_take_home||0),remaining=income-total;
+  const plannedSavings=savingsGoals.filter(g=>Number(g.per_paycheck_amount||0)>0&&Number(g.current_amount||0)<Number(g.target_amount||0));
+  const savingsTotal=plannedSavings.reduce((s,g)=>s+Number(g.per_paycheck_amount||0),0),afterPlans=remaining-savingsTotal;
   document.getElementById("paydayHeadline").textContent="Next payday: "+prettyDate(isoLocal(next));
   document.getElementById("paydayFrequencyLabel").textContent=payFrequencyLabel(paydaySettings.pay_frequency);
   document.getElementById("paydayIncome").textContent=money(income);
   document.getElementById("paydayBillsTotal").textContent=money(total);
   document.getElementById("paydayRemaining").textContent=money(remaining);
+  document.getElementById("paydaySavingsTotal").textContent=money(savingsTotal);
+  document.getElementById("paydayAfterPlans").textContent=money(afterPlans);
+  const savingsList=document.getElementById("paydaySavingsList");savingsList.innerHTML="";
+  if(!plannedSavings.length){savingsList.className="empty";savingsList.textContent="No paycheck savings planned yet. ✦"}
+  else{savingsList.className="";plannedSavings.forEach(g=>{const row=document.createElement("div");row.className="entry";const main=document.createElement("div");main.className="entry-main";const title=document.createElement("strong");title.textContent=g.name+" · "+money(g.per_paycheck_amount)+"/paycheck";const meta=document.createElement("small");meta.textContent=money(Math.max(0,Number(g.target_amount||0)-Number(g.current_amount||0)))+" still to go";main.append(title,meta);row.append(main);savingsList.append(row)})}
   const list=document.getElementById("paydayBillList");list.innerHTML="";
   if(!items.length){list.className="empty";list.textContent="Nothing due before payday. The money goblin approves. ✦";return}
   list.className="";
