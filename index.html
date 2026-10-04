@@ -201,7 +201,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.4 · Runtime fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.5 · Synced Dashboard</div>
   </div>
 </div>
 
@@ -234,8 +234,12 @@ input,select,textarea,button{max-width:100%}
     </div>
   </div>
   <div class="grid">
-    <div class="card"><h2>Today's chores <span>Live</span></h2><div id="dashboardChores" class="empty">Loading your chaos…</div><button class="linkbtn" data-go="housekeeping">Open Housekeeping →</button></div>
-    <div class="card"><h2>Room focus <span>This week's nudge</span></h2><div id="dashboardRoomFocus" class="focus-room">—</div><p id="dashboardRoomCopy" class="muted">One area at a time.</p><button class="linkbtn" data-go="housekeeping">View rotation →</button></div>
+    <div class="card wide"><h2>Today's chores & focus <span>Live</span></h2>
+      <div id="dashboardFocusLine" class="focus-room">Loading today's focus…</div>
+      <p id="dashboardRoomCopy" class="muted">Your focus follows the chores that are actually due.</p>
+      <div id="dashboardChores" class="empty">Loading your chaos…</div>
+      <button class="linkbtn" data-go="housekeeping">Open Housekeeping →</button>
+    </div>
     <div class="card"><h2>Coming up <span>Calendar</span></h2><div id="dashboardEvents" class="empty">No upcoming events.</div><button class="linkbtn" data-go="calendar">Open Calendar →</button></div>
     <div class="card"><h2>Goals in motion <span>Keep going</span></h2><div id="dashboardGoals" class="empty">No active goals yet.</div><button class="linkbtn" data-go="goals">Open Goals →</button></div>
     <div class="card wide"><h2>Quick access <span>Jump right in</span></h2><div class="quickgrid">
@@ -684,7 +688,7 @@ function renderChores(){
   if(choreFilter==="due")all=due; else if(choreFilter==="done")all=all.filter(c=>c.completed);
   all.sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
   renderList(document.getElementById("allChoreList"),all,"Nothing here yet.");
-  renderRooms();renderDashboardChores();
+  renderRooms();renderDashboardChores();renderLiveDashboard();
 }
 async function loadChores(){
   try{const data=await supabaseRequest("/rest/v1/tasks?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});chores=Array.isArray(data)?data:[];renderChores()}
@@ -754,10 +758,16 @@ function renderLiveDashboard(){
     document.getElementById("dashGoalCount").textContent=active.length;
     const msg=document.getElementById("dashboardMessage");
     msg.textContent=!due.length?"Nothing due today. The goblin approves. ✦":due.length===1?"One chore needs your attention today. The rest can wait.":due.length+" chores are due. Pick what matters; perfection is not invited.";
-    const focus=rotationFocus();
-    document.getElementById("dashboardRoomFocus").textContent=focus||"No focus room";
-    const n=focus?chores.filter(c=>taskRoom(c).toLowerCase()===focus.toLowerCase()).length:0;
-    document.getElementById("dashboardRoomCopy").textContent=focus?(n?n+" chore"+(n===1?"":"s")+" linked to this area. One room at a time.":"No chores linked here yet."):"Add a room when you're ready.";
+    const dueRooms=[...new Set(due.map(c=>taskRoom(c)).filter(Boolean))];
+    const focusLine=document.getElementById("dashboardFocusLine");
+    const focusCopy=document.getElementById("dashboardRoomCopy");
+    if(dueRooms.length){
+      focusLine.textContent="Focus: "+dueRooms.join(" + ");
+      focusCopy.textContent=due.length+" chore"+(due.length===1?"":"s")+" due across "+dueRooms.length+" room"+(dueRooms.length===1?"":"s")+".";
+    }else{
+      focusLine.textContent="No room needs you today. ✦";
+      focusCopy.textContent="Nothing due means nothing gets to manufacture guilt.";
+    }
     const ev=document.getElementById("dashboardEvents");ev.innerHTML="";
     if(!future.length){ev.className="empty";ev.textContent="Nothing on the horizon. Suspiciously peaceful. ✦"}else{ev.className="live-list";future.slice(0,4).forEach(e=>{const d=new Date(e.event_date+"T12:00:00"),row=document.createElement("div");row.className="live-item";const date=document.createElement("div");date.className="live-date";const mon=document.createElement("span");mon.textContent=d.toLocaleDateString(undefined,{month:"short"});const day=document.createElement("b");day.textContent=d.getDate();date.append(mon,day);const cp=document.createElement("div");cp.className="live-copy";const st=document.createElement("strong");st.textContent=e.title;const sm=document.createElement("small");sm.textContent=e.event_time?e.event_time.slice(0,5):"All day";cp.append(st,sm);row.append(date,cp);ev.append(row)})}
     const gl=document.getElementById("dashboardGoals");gl.innerHTML="";
@@ -844,6 +854,18 @@ document.getElementById("mobileSignOutBtn").addEventListener("click",()=>{
   closeMore();
   document.getElementById("signOutBtn").click();
 });
+
+let ccLastCloudRefresh=0;
+async function refreshCloudView(){
+  if(!currentUser)return;
+  const now=Date.now();
+  if(now-ccLastCloudRefresh<5000)return;
+  ccLastCloudRefresh=now;
+  await Promise.all([loadEvents(),loadGoals(),loadChores()]);
+  renderLiveDashboard();
+}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshCloudView()});
+window.addEventListener("focus",refreshCloudView);
 
 const restored=restoreSession();
 if(restored?.user) startApp(restored.user);
