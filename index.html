@@ -166,7 +166,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v7 · Housekeeping</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v7.1 · Housekeeping fix</div>
   </div>
 </div>
 
@@ -548,12 +548,12 @@ function recurrenceLabel(r){
 function taskRepeat(task){
   if(!task.recurring) return "none";
   const desc=task.description||"";
-  const m=desc.match(/\\[CC_REPEAT:([^\\]]+)\\]/);
+  const m=desc.match(/\[CC_REPEAT:([^\]]+)\]/);
   return m?m[1]:"weekly";
 }
 function taskRoom(task){
   const desc=task.description||"";
-  const m=desc.match(/\\[CC_ROOM:([^\\]]*)\\]/);
+  const m=desc.match(/\[CC_ROOM:([^\]]*)\]/);
   return m?m[1]:"";
 }
 function taskDescription(room,repeat){
