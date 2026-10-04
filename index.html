@@ -205,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13 · Bills & Finances</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.1 · Debts & Savings</div>
   </div>
 </div>
 
@@ -416,6 +416,41 @@ input,select,textarea,button{max-width:100%}
     </div>
     <div id="billList" class="empty">No bills yet. A suspiciously peaceful financial situation. ✦</div>
   </div>
+
+  <div class="stats" style="margin:16px 0">
+    <div class="stat"><span>Total debt</span><strong id="debtTotal">$0.00</strong></div>
+    <div class="stat"><span>Debt paid off</span><strong id="debtPaidOff">$0.00</strong></div>
+    <div class="stat"><span>Total savings</span><strong id="savingsTotal">$0.00</strong></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>Debts <span id="debtCount">0 debts</span></h2>
+    <form id="debtForm" class="formgrid">
+      <label class="field">Debt name<input id="debtName" required maxlength="120" placeholder="e.g. Credit card"></label>
+      <label class="field">Current balance<input id="debtBalance" required type="number" min="0" step="0.01" placeholder="0.00"></label>
+      <label class="field">Original balance<input id="debtOriginal" type="number" min="0" step="0.01" placeholder="Optional"></label>
+      <label class="field">Interest rate %<input id="debtRate" type="number" min="0" step="0.01" placeholder="Optional"></label>
+      <label class="field">Minimum payment<input id="debtMinimum" type="number" min="0" step="0.01" placeholder="Optional"></label>
+      <label class="field">Type<select id="debtType"><option>Credit Card</option><option>Personal Loan</option><option>Mortgage</option><option>Auto Loan</option><option>Medical</option><option>Student Loan</option><option selected>Other</option></select></label>
+      <label class="field">Due day<input id="debtDueDay" type="number" min="1" max="31" placeholder="1–31"></label>
+      <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="debtNotes" rows="2"></textarea></label>
+      <button class="primary" type="submit">＋ Add debt</button>
+    </form>
+    <div id="debtList" class="empty" style="margin-top:16px">No debts added. ✦</div>
+  </div>
+
+  <div class="card">
+    <h2>Savings Goals <span id="savingsCount">0 goals</span></h2>
+    <form id="savingsForm" class="formgrid">
+      <label class="field">Goal name<input id="savingsName" required maxlength="120" placeholder="e.g. Retirement House"></label>
+      <label class="field">Target amount<input id="savingsTarget" required type="number" min="0" step="0.01" placeholder="0.00"></label>
+      <label class="field">Current amount<input id="savingsCurrent" type="number" min="0" step="0.01" value="0"></label>
+      <label class="field">Target date <span style="font-weight:400">(optional)</span><input id="savingsTargetDate" type="date"></label>
+      <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="savingsNotes" rows="2"></textarea></label>
+      <button class="primary" type="submit">＋ Add savings goal</button>
+    </form>
+    <div id="savingsList" class="empty" style="margin-top:16px">No savings goals yet. Dream fund awaiting instructions. ✦</div>
+  </div>
 </section>
   <section class="view" id="calendar">
     <div class="card" style="margin-bottom:16px">
@@ -557,6 +592,21 @@ input,select,textarea,button{max-width:100%}
       <label class="field"><span><input id="editBillAutopay" type="checkbox" style="width:auto;margin-right:8px">Autopay</span></label>
       <label class="field" style="grid-column:1/-1">Notes<textarea id="editBillNotes" rows="2"></textarea></label>
       <div class="cc-modal-actions"><button id="cancelBillEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
+    </form>
+  </div>
+</div>
+<div class="cc-modal" id="moneyAdjustModal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2 id="moneyAdjustTitle">Update amount</h2>
+    <form id="moneyAdjustForm" class="formgrid">
+      <input id="moneyAdjustKind" type="hidden">
+      <input id="moneyAdjustId" type="hidden">
+      <input id="moneyAdjustDirection" type="hidden">
+      <label class="field"><span id="moneyAdjustLabel">Amount</span><input id="moneyAdjustAmount" required type="number" min="0.01" step="0.01" placeholder="0.00"></label>
+      <div class="cc-modal-actions">
+        <button id="cancelMoneyAdjust" type="button">Cancel</button>
+        <button class="primary" type="submit">Save</button>
+      </div>
     </form>
   </div>
 </div>
@@ -1269,6 +1319,101 @@ document.getElementById("billEditForm").addEventListener("submit",async e=>{
 });
 async function removeBill(b){if(!confirm("Remove "+b.name+"?"))return;try{await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadBills();toast("Bill removed.")}catch(err){console.error(err);toast("Couldn't remove that bill.")}}
 
+
+// ---- Debts & Savings (v13.1) ----
+let debts=[],savingsGoals=[];
+function pct(current,total){if(!total||total<=0)return 0;return Math.max(0,Math.min(100,Math.round((current/total)*100)))}
+function progressBar(percent){
+  const wrap=document.createElement("div");wrap.style.cssText="height:10px;background:rgba(255,255,255,.09);border-radius:999px;overflow:hidden;margin-top:8px";
+  const fill=document.createElement("div");fill.style.cssText="height:100%;width:"+percent+"%;background:linear-gradient(90deg,var(--pink),var(--teal));border-radius:999px";
+  wrap.append(fill);return wrap;
+}
+async function loadDebts(){
+  try{const data=await supabaseRequest("/rest/v1/debts?select=*&order=created_at.asc",{headers:{"Accept":"application/json"}});debts=Array.isArray(data)?data:[];renderDebts()}
+  catch(err){console.error(err);toast("Couldn't load debts.")}
+}
+function renderDebts(){
+  const total=debts.reduce((s,d)=>s+Number(d.balance||0),0);
+  const original=debts.reduce((s,d)=>s+Number(d.original_balance||d.balance||0),0);
+  document.getElementById("debtTotal").textContent=money(total);
+  document.getElementById("debtPaidOff").textContent=money(Math.max(0,original-total));
+  document.getElementById("debtCount").textContent=debts.length+" debt"+(debts.length===1?"":"s");
+  const list=document.getElementById("debtList");list.innerHTML="";
+  if(!debts.length){list.className="empty";list.textContent="No debts added. ✦";return}
+  list.className="";
+  debts.forEach(d=>{
+    const orig=Number(d.original_balance||d.balance||0),bal=Number(d.balance||0),paid=Math.max(0,orig-bal),percent=orig?Math.round((paid/orig)*100):0;
+    const row=document.createElement("div");row.className="entry";
+    const main=document.createElement("div");main.className="entry-main";
+    const title=document.createElement("strong");title.textContent=d.name+" · "+money(bal)+" remaining";
+    const meta=document.createElement("small");
+    const bits=[d.debt_type||"Other"];
+    if(d.interest_rate!=null)bits.push(Number(d.interest_rate)+"% APR");
+    if(d.minimum_payment!=null)bits.push(money(d.minimum_payment)+" minimum");
+    if(d.due_day)bits.push("due day "+d.due_day);
+    bits.push(percent+"% paid off");
+    meta.textContent=bits.join(" · ");main.append(title,meta,progressBar(percent));
+    if(d.notes){const n=document.createElement("small");n.textContent=d.notes;main.append(n)}
+    const actions=document.createElement("div");actions.className="chore-actions";
+    const pay=document.createElement("button");pay.type="button";pay.textContent="Make Payment";pay.addEventListener("click",()=>openMoneyAdjust("debt",d.id,"subtract","Make a debt payment","Payment amount"));
+    const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeDebt(d));
+    actions.append(pay,del);row.append(main,actions);list.append(row);
+  });
+}
+document.getElementById("debtForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const balance=Number(document.getElementById("debtBalance").value),origRaw=document.getElementById("debtOriginal").value;
+  const payload={user_id:currentUser.id,name:document.getElementById("debtName").value.trim(),balance,original_balance:origRaw===""?balance:Number(origRaw),interest_rate:document.getElementById("debtRate").value===""?null:Number(document.getElementById("debtRate").value),minimum_payment:document.getElementById("debtMinimum").value===""?null:Number(document.getElementById("debtMinimum").value),debt_type:document.getElementById("debtType").value,due_day:document.getElementById("debtDueDay").value===""?null:Number(document.getElementById("debtDueDay").value),notes:document.getElementById("debtNotes").value.trim(),updated_at:new Date().toISOString()};
+  try{await supabaseRequest("/rest/v1/debts",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});e.target.reset();document.getElementById("debtType").value="Other";await loadDebts();toast("Debt added. Time to make that number smaller. ✦")}catch(err){console.error(err);toast("Couldn't add that debt.")}
+});
+async function removeDebt(d){if(!confirm("Remove "+d.name+"?"))return;try{await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(d.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadDebts();toast("Debt removed.")}catch(err){console.error(err);toast("Couldn't remove that debt.")}}
+
+async function loadSavings(){
+  try{const data=await supabaseRequest("/rest/v1/savings?select=*&order=created_at.asc",{headers:{"Accept":"application/json"}});savingsGoals=Array.isArray(data)?data:[];renderSavings()}
+  catch(err){console.error(err);toast("Couldn't load savings goals.")}
+}
+function renderSavings(){
+  const total=savingsGoals.reduce((s,g)=>s+Number(g.current_amount||0),0);
+  document.getElementById("savingsTotal").textContent=money(total);
+  document.getElementById("savingsCount").textContent=savingsGoals.length+" goal"+(savingsGoals.length===1?"":"s");
+  const list=document.getElementById("savingsList");list.innerHTML="";
+  if(!savingsGoals.length){list.className="empty";list.textContent="No savings goals yet. Dream fund awaiting instructions. ✦";return}
+  list.className="";
+  savingsGoals.forEach(g=>{
+    const current=Number(g.current_amount||0),target=Number(g.target_amount||0),percent=pct(current,target);
+    const row=document.createElement("div");row.className="entry";
+    const main=document.createElement("div");main.className="entry-main";
+    const title=document.createElement("strong");title.textContent=g.name+" · "+money(current)+" / "+money(target);
+    const meta=document.createElement("small");meta.textContent=percent+"% funded"+(g.target_date?" · target "+prettyDate(g.target_date):"");
+    main.append(title,meta,progressBar(percent));if(g.notes){const n=document.createElement("small");n.textContent=g.notes;main.append(n)}
+    const actions=document.createElement("div");actions.className="chore-actions";
+    const add=document.createElement("button");add.type="button";add.textContent="+ Add Money";add.addEventListener("click",()=>openMoneyAdjust("savings",g.id,"add","Add to "+g.name,"Amount to add"));
+    const withdraw=document.createElement("button");withdraw.type="button";withdraw.textContent="− Withdraw";withdraw.addEventListener("click",()=>openMoneyAdjust("savings",g.id,"subtract","Withdraw from "+g.name,"Amount to withdraw"));
+    const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeSavings(g));
+    actions.append(add,withdraw,del);row.append(main,actions);list.append(row);
+  });
+}
+document.getElementById("savingsForm").addEventListener("submit",async e=>{
+  e.preventDefault();const payload={user_id:currentUser.id,name:document.getElementById("savingsName").value.trim(),target_amount:Number(document.getElementById("savingsTarget").value),current_amount:Number(document.getElementById("savingsCurrent").value||0),target_date:document.getElementById("savingsTargetDate").value||null,notes:document.getElementById("savingsNotes").value.trim(),updated_at:new Date().toISOString()};
+  try{await supabaseRequest("/rest/v1/savings",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});e.target.reset();document.getElementById("savingsCurrent").value="0";await loadSavings();toast("Savings goal added. ✦")}catch(err){console.error(err);toast("Couldn't add that savings goal.")}
+});
+async function removeSavings(g){if(!confirm("Remove "+g.name+"?"))return;try{await supabaseRequest("/rest/v1/savings?id=eq."+encodeURIComponent(g.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadSavings();toast("Savings goal removed.")}catch(err){console.error(err);toast("Couldn't remove that savings goal.")}}
+
+function openMoneyAdjust(kind,id,direction,title,label){
+  document.getElementById("moneyAdjustKind").value=kind;document.getElementById("moneyAdjustId").value=id;document.getElementById("moneyAdjustDirection").value=direction;document.getElementById("moneyAdjustTitle").textContent=title;document.getElementById("moneyAdjustLabel").textContent=label;document.getElementById("moneyAdjustAmount").value="";
+  const m=document.getElementById("moneyAdjustModal");m.classList.add("open");m.setAttribute("aria-hidden","false");setTimeout(()=>document.getElementById("moneyAdjustAmount").focus(),50);
+}
+function closeMoneyAdjust(){const m=document.getElementById("moneyAdjustModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
+document.getElementById("cancelMoneyAdjust").addEventListener("click",closeMoneyAdjust);document.getElementById("moneyAdjustModal").addEventListener("click",e=>{if(e.target.id==="moneyAdjustModal")closeMoneyAdjust()});
+document.getElementById("moneyAdjustForm").addEventListener("submit",async e=>{
+  e.preventDefault();const kind=document.getElementById("moneyAdjustKind").value,id=document.getElementById("moneyAdjustId").value,dir=document.getElementById("moneyAdjustDirection").value,amt=Number(document.getElementById("moneyAdjustAmount").value);if(!(amt>0))return;
+  try{
+    if(kind==="debt"){const d=debts.find(x=>x.id===id);if(!d)return;const next=Math.max(0,Number(d.balance||0)-(dir==="subtract"?amt:-amt));await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({balance:next,updated_at:new Date().toISOString()})});await loadDebts();toast(next===0?"DEBT DESTROYED. 🎉":"Payment recorded. Keep killing it. ✦")}
+    else{const g=savingsGoals.find(x=>x.id===id);if(!g)return;const cur=Number(g.current_amount||0),next=Math.max(0,dir==="add"?cur+amt:cur-amt);await supabaseRequest("/rest/v1/savings?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({current_amount:next,updated_at:new Date().toISOString()})});await loadSavings();toast(dir==="add"?"Savings increased. ✦":"Withdrawal recorded.")}
+    closeMoneyAdjust();
+  }catch(err){console.error(err);toast("Couldn't update that amount.")}
+});
+
 // ---- Session refresh (v7.2) ----
 async function refreshSession(){
   const saved=JSON.parse(localStorage.getItem("chaos_coordinator_session_v5")||"null");
@@ -1374,7 +1519,7 @@ async function startApp(user){
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills(),loadDebts(),loadSavings()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
@@ -1397,7 +1542,7 @@ async function refreshCloudView(){
   if(now-ccLastCloudRefresh<5000)return;
   ccLastCloudRefresh=now;
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills(),loadDebts(),loadSavings()]);
   await loadHousekeepingSettings();
   renderLiveDashboard();
 }
