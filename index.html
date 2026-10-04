@@ -208,7 +208,12 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
   <button class="active" data-view="home"><b>⌂</b>Home</button><button data-view="housekeeping"><b>🧹</b>Chores</button><button data-view="projects"><b>⚒</b>Projects</button><button data-view="groceries"><b>🛒</b>Groceries</button><button data-view="finances"><b>☰</b>More</button>
 </div>
 <div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const SUPABASE_URL = "https://yuwlxolcknozudlhtvfr.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_85J_B7ktksZwn5EZsGswsQ_PWjvSb8R";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
 const labels={home:"Dashboard",housekeeping:"Housekeeping",projects:"Projects",groceries:"Food & Groceries",finances:"Bills & Finances",calendar:"Calendar",goals:"Goals",settings:"Settings"};
 function show(view){document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===view));document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===view));document.getElementById('pageTitle').textContent=labels[view]||"Dashboard";window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.view)));
@@ -333,15 +338,24 @@ authForm.addEventListener("submit",async e=>{
   setAuthMessage("Working...");
   const email=document.getElementById("authEmail").value.trim();
   const password=document.getElementById("authPassword").value;
-  const result=signUpMode
-    ? await supabase.auth.signUp({email,password})
-    : await supabase.auth.signInWithPassword({email,password});
-  if(result.error){setAuthMessage(result.error.message,true);return}
-  if(signUpMode && !result.data.session){
-    setAuthMessage("Account created. Check your email to confirm it, then sign in.");
-    return;
+  try {
+    const authRequest = signUpMode
+      ? supabase.auth.signUp({email,password})
+      : supabase.auth.signInWithPassword({email,password});
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Supabase did not respond within 15 seconds. Check your connection and try again.")), 15000)
+    );
+    const result = await Promise.race([authRequest, timeout]);
+    if(result.error){setAuthMessage(result.error.message,true);return}
+    if(signUpMode && !result.data.session){
+      setAuthMessage("Account created. Check your email to confirm it, then sign in.");
+      return;
+    }
+    if(result.data.user) await startApp(result.data.user);
+  } catch (err) {
+    console.error(err);
+    setAuthMessage(err?.message || "Could not connect to Supabase. Please try again.", true);
   }
-  if(result.data.user) await startApp(result.data.user);
 });
 
 async function startApp(user){
