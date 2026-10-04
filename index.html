@@ -205,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v11 · Project Details & Steps</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v12 · Food & Groceries</div>
   </div>
 </div>
 
@@ -346,7 +346,36 @@ input,select,textarea,button{max-width:100%}
     <div id="projectList" class="empty">No projects yet. Suspiciously responsible. ✦</div>
   </div>
 </section>
-  <section class="view" id="groceries"><div class="card placeholder"><div><div class="big">🛒</div><h2>Food & Groceries</h2><p>Meal plans, pantry inventory, freezer inventory, and shopping lists.</p><button class="linkbtn" onclick="toast('Food & Groceries is ready for the next build step.')">Plan this section →</button></div></div></section>
+  <section class="view" id="groceries">
+  <div class="hero">
+    <div class="eyebrow">LOW-MAINTENANCE FOOD TRACKING</div>
+    <h2>Know enough. Not everything.</h2>
+    <p>Keep a grocery list and loosely track what is in the pantry, fridge, and freezer—without turning dinner into data entry.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>Quick add <span>Grocery or something already at home</span></h2>
+    <form id="foodForm" class="formgrid">
+      <label class="field">Item<input id="foodItem" required maxlength="120" placeholder="e.g. Milk"></label>
+      <label class="field">Where<select id="foodLocation"><option value="grocery">Grocery list</option><option value="pantry">Pantry</option><option value="fridge">Fridge</option><option value="freezer">Freezer</option></select></label>
+      <label class="field">Amount <span style="font-weight:400">(optional)</span><input id="foodQuantity" maxlength="50" placeholder="e.g. 2, one bag"></label>
+      <label class="field">Status<select id="foodStatus"><option value="out">Need to buy</option><option value="have">Have it</option><option value="low">Running low</option></select></label>
+      <label class="field" style="grid-column:1/-1"><span><input id="foodStaple" type="checkbox" style="width:auto;margin-right:8px">Staple — I usually want this kept in the house</span></label>
+      <button class="primary" type="submit">＋ Add item</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Food & groceries <span id="foodCount">0 items</span></h2>
+    <div class="chore-filter" id="foodTabs">
+      <button type="button" class="active" data-food-tab="grocery">🛒 Grocery List</button>
+      <button type="button" data-food-tab="pantry">🥫 Pantry</button>
+      <button type="button" data-food-tab="fridge">🧊 Fridge</button>
+      <button type="button" data-food-tab="freezer">❄️ Freezer</button>
+    </div>
+    <div id="foodList" class="empty">Your grocery list is gloriously empty. ✦</div>
+  </div>
+</section>
   <section class="view" id="finances"><div class="card placeholder"><div><div class="big">💰</div><h2>Bills & Finances</h2><p>Track bills, monthly budgets, debt, and savings goals in one place.</p><button class="linkbtn" onclick="toast('Bills & Finances is ready for the next build step.')">Plan this section →</button></div></div></section>
   <section class="view" id="calendar">
     <div class="card" style="margin-bottom:16px">
@@ -981,6 +1010,73 @@ document.getElementById("projectStepForm").addEventListener("submit",async e=>{
   }catch(err){console.error(err);toast("Couldn't add that project step: "+(err.message||"unknown error"))}
 });
 
+
+// ---- Food & Groceries (v12) ----
+let foodItems=[],foodTab="grocery";
+function foodStatusLabel(s){return ({have:"Have it",low:"Running low",out:"Need to buy"})[s]||"Have it"}
+function groceryNeeded(i){return i.location==="grocery"||i.stock_status==="low"||i.stock_status==="out"}
+function renderFood(){
+  const list=document.getElementById("foodList");
+  let shown=foodTab==="grocery"?foodItems.filter(groceryNeeded):foodItems.filter(i=>i.location===foodTab);
+  shown=shown.slice().sort((a,b)=>Number(b.staple)-Number(a.staple)||(a.item||"").localeCompare(b.item||""));
+  document.getElementById("foodCount").textContent=foodItems.length+" item"+(foodItems.length===1?"":"s");
+  list.innerHTML="";
+  if(!shown.length){list.className="empty";list.textContent=foodTab==="grocery"?"Your grocery list is gloriously empty. ✦":"Nothing tracked here yet—and that's allowed. ✦";return}
+  list.className="";
+  shown.forEach(i=>{
+    const row=document.createElement("div");row.className="entry";
+    const main=document.createElement("div");main.className="entry-main";
+    const title=document.createElement("strong");title.textContent=(i.staple?"★ ":"")+i.item+(i.quantity?" · "+i.quantity:"");
+    const meta=document.createElement("small");
+    meta.textContent=foodTab==="grocery"?(i.location==="grocery"?"On grocery list":foodStatusLabel(i.stock_status)+" · "+i.location):(foodStatusLabel(i.stock_status)+(i.staple?" · Staple":""));
+    main.append(title,meta);
+    if(i.notes){const note=document.createElement("small");note.textContent=i.notes;main.append(note)}
+    const actions=document.createElement("div");actions.className="chore-actions";
+    if(foodTab==="grocery"){
+      const bought=document.createElement("button");bought.type="button";bought.textContent="Bought ✓";bought.addEventListener("click",()=>markFoodBought(i));actions.append(bought);
+    }else{
+      const have=document.createElement("button");have.type="button";have.textContent="Have";have.addEventListener("click",()=>setFoodStatus(i,"have"));
+      const low=document.createElement("button");low.type="button";low.textContent="Low";low.addEventListener("click",()=>setFoodStatus(i,"low"));
+      const out=document.createElement("button");out.type="button";out.textContent="Out";out.addEventListener("click",()=>setFoodStatus(i,"out"));
+      actions.append(have,low,out);
+    }
+    const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeFood(i));actions.append(del);
+    row.append(main,actions);list.append(row);
+  });
+}
+async function loadFood(){
+  try{const data=await supabaseRequest("/rest/v1/groceries?select=*&order=created_at.desc",{headers:{"Accept":"application/json"}});foodItems=Array.isArray(data)?data:[];renderFood()}
+  catch(err){console.error(err);toast("Couldn't load food & groceries.")}
+}
+document.getElementById("foodForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const item=document.getElementById("foodItem").value.trim(),location=document.getElementById("foodLocation").value,quantity=document.getElementById("foodQuantity").value.trim(),staple=document.getElementById("foodStaple").checked;
+  let stock_status=document.getElementById("foodStatus").value;if(location==="grocery")stock_status="out";
+  try{await supabaseRequest("/rest/v1/groceries",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,item,quantity:quantity||null,purchased:false,location,stock_status,staple,notes:null,updated_at:new Date().toISOString()})});document.getElementById("foodForm").reset();document.getElementById("foodLocation").value="grocery";document.getElementById("foodStatus").value="out";await loadFood();toast("Added. Grocery goblin has it. ✦")}
+  catch(err){console.error(err);toast("Couldn't add that item: "+(err.message||"unknown error"))}
+});
+document.querySelectorAll("[data-food-tab]").forEach(b=>b.addEventListener("click",()=>{foodTab=b.dataset.foodTab;document.querySelectorAll("[data-food-tab]").forEach(x=>x.classList.toggle("active",x===b));renderFood()}));
+async function setFoodStatus(i,status){
+  try{await supabaseRequest("/rest/v1/groceries?id=eq."+encodeURIComponent(i.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({stock_status:status,purchased:false,updated_at:new Date().toISOString()})});await loadFood();if(status==="low"||status==="out")toast(i.item+" added to the grocery list. 🛒")}
+  catch(err){console.error(err);toast("Couldn't update that item.")}
+}
+async function markFoodBought(i){
+  try{
+    if(i.location==="grocery"&&!i.staple){await supabaseRequest("/rest/v1/groceries?id=eq."+encodeURIComponent(i.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}})}
+    else{
+      const location=i.location==="grocery"?"pantry":i.location;
+      await supabaseRequest("/rest/v1/groceries?id=eq."+encodeURIComponent(i.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({location,stock_status:"have",purchased:true,updated_at:new Date().toISOString()})});
+    }
+    await loadFood();toast("Bought! Back to Have it. ✦");
+  }catch(err){console.error(err);toast("Couldn't mark that bought.")}
+}
+async function removeFood(i){
+  if(!confirm("Remove "+i.item+"?"))return;
+  try{await supabaseRequest("/rest/v1/groceries?id=eq."+encodeURIComponent(i.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadFood();toast("Item removed.")}
+  catch(err){console.error(err);toast("Couldn't remove that item.")}
+}
+document.getElementById("foodLocation").addEventListener("change",e=>{document.getElementById("foodStatus").value=e.target.value==="grocery"?"out":"have"});
+
 // ---- Session refresh (v7.2) ----
 async function refreshSession(){
   const saved=JSON.parse(localStorage.getItem("chaos_coordinator_session_v5")||"null");
@@ -1086,7 +1182,7 @@ async function startApp(user){
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
@@ -1109,7 +1205,7 @@ async function refreshCloudView(){
   if(now-ccLastCloudRefresh<5000)return;
   ccLastCloudRefresh=now;
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood()]);
   await loadHousekeepingSettings();
   renderLiveDashboard();
 }
