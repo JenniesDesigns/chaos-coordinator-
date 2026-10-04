@@ -231,6 +231,25 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator{
   cursor:pointer;
 }
 </style>
+
+<style>
+/* V13.3.3: reliable picker icons on dark backgrounds */
+.picker-wrap{position:relative;display:flex;align-items:center;width:100%}
+.picker-wrap>input{width:100%;padding-right:46px!important}
+.picker-wrap>input::-webkit-calendar-picker-indicator{
+  opacity:0!important;
+  width:42px;height:100%;position:absolute;right:0;cursor:pointer;
+}
+.cc-picker-button{
+  position:absolute;right:5px;top:50%;transform:translateY(-50%);
+  width:34px!important;min-width:34px!important;height:34px!important;
+  padding:0!important;border:0!important;background:transparent!important;
+  color:#fff!important;font-size:20px!important;line-height:1!important;
+  display:flex!important;align-items:center;justify-content:center;
+  z-index:2;cursor:pointer;box-shadow:none!important;
+}
+.cc-picker-button:hover{background:rgba(255,255,255,.08)!important;border-radius:8px!important}
+</style>
 </head>
 <body>
 
@@ -263,7 +282,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator{
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.3.2 · Dark Mode Calendar Fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.3.3 · Bright Picker Buttons</div>
   </div>
 </div>
 
@@ -2005,6 +2024,23 @@ const restored=restoreSession();
 if(restored?.user) startApp(restored.user);
 
 
+
+function installBrightPickerButtons(){
+  document.querySelectorAll('input[type="date"],input[type="time"],input[type="datetime-local"]').forEach(input=>{
+    if(input.closest(".picker-wrap"))return;
+    const wrap=document.createElement("div");wrap.className="picker-wrap";
+    input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);
+    const btn=document.createElement("button");btn.type="button";btn.className="cc-picker-button";
+    const isTime=input.type==="time";btn.textContent=isTime?"🕐":"📅";
+    btn.setAttribute("aria-label",isTime?"Choose time":"Choose date");
+    btn.addEventListener("click",()=>{
+      try{if(typeof input.showPicker==="function"){input.showPicker();return}}catch(err){}
+      input.focus();input.click();
+    });
+    wrap.appendChild(btn);
+  });
+}
+document.addEventListener("DOMContentLoaded",installBrightPickerButtons);
 </script>
 </body>
 </html>
