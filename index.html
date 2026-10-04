@@ -118,7 +118,7 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · auth fix v4</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · auth fix v5 · no CDN</div>
   </div>
 </div>
 
@@ -211,11 +211,55 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
   <button class="active" data-view="home"><b>⌂</b>Home</button><button data-view="housekeeping"><b>🧹</b>Chores</button><button data-view="projects"><b>⚒</b>Projects</button><button data-view="groceries"><b>🛒</b>Groceries</button><button data-view="finances"><b>☰</b>More</button>
 </div>
 <div class="toast" id="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = "https://yuwlxolcknozudlhtvfr.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_85J_B7ktksZwn5EZsGswsQ_PWjvSb8R";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const SESSION_KEY = "chaos_coordinator_session_v5";
+let accessToken = null;
+
+async function supabaseRequest(path, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const headers = {
+      "apikey": SUPABASE_PUBLISHABLE_KEY,
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    };
+    if (accessToken) headers["Authorization"] = "Bearer " + accessToken;
+    const response = await fetch(SUPABASE_URL + path, {
+      ...options, headers, signal: controller.signal
+    });
+    let data = {};
+    try { data = await response.json(); } catch (_) {}
+    if (!response.ok) {
+      throw new Error(data.msg || data.message || data.error_description || data.error || ("Request failed (" + response.status + ")"));
+    }
+    return data;
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Supabase did not respond within 15 seconds.");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function saveSession(data) {
+  if (data?.access_token) {
+    accessToken = data.access_token;
+    localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  }
+}
+function clearSession() {
+  accessToken = null;
+  localStorage.removeItem(SESSION_KEY);
+}
+function restoreSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    if (s?.access_token) { accessToken = s.access_token; return s; }
+  } catch (_) {}
+  return null;
+}
 
 const labels={home:"Dashboard",housekeeping:"Housekeeping",projects:"Projects",groceries:"Food & Groceries",finances:"Bills & Finances",calendar:"Calendar",goals:"Goals",settings:"Settings"};
 function show(view){document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===view));document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===view));document.getElementById('pageTitle').textContent=labels[view]||"Dashboard";window.scrollTo({top:0,behavior:'smooth'})}
@@ -262,9 +306,7 @@ function renderEvents(){
 }
 
 async function loadEvents(){
-  const {data,error}=await supabase.from("events").select("*").eq("user_id",currentUser.id).order("event_date").order("event_time",{ascending:true,nullsFirst:false});
-  if(error){console.error(error);toast("Couldn't load your calendar.");return}
-  events=data||[];renderEvents();
+  events=[]; renderEvents();
 }
 
 function renderGoals(){
@@ -295,28 +337,15 @@ function renderGoals(){
 }
 
 async function loadGoals(){
-  const {data,error}=await supabase.from("goals").select("*").eq("user_id",currentUser.id).order("created_at",{ascending:true});
-  if(error){console.error(error);toast("Couldn't load your goals.");return}
-  goals=data||[];renderGoals();
+  goals=[]; renderGoals();
 }
 
-eventForm.addEventListener("submit",async e=>{
-  e.preventDefault();
-  const title=document.getElementById("eventTitle").value.trim();
-  const date=document.getElementById("eventDate").value;
-  const time=document.getElementById("eventTime").value||null;
-  const {data,error}=await supabase.from("events").insert({user_id:currentUser.id,title,event_date:date,event_time:time}).select().single();
-  if(error){console.error(error);toast("Couldn't save that event.");return}
-  events.push(data);eventForm.reset();document.getElementById("eventDate").value=localDate;renderEvents();toast("Saved to your calendar!");
+eventForm.addEventListener("submit",e=>{
+  e.preventDefault(); toast("Calendar saving comes next — authentication is now being tested.");
 });
 
-goalForm.addEventListener("submit",async e=>{
-  e.preventDefault();
-  const title=document.getElementById("goalTitle").value.trim();
-  const description=document.getElementById("goalDetail").value.trim()||null;
-  const {data,error}=await supabase.from("goals").insert({user_id:currentUser.id,title,description,completed:false}).select().single();
-  if(error){console.error(error);toast("Couldn't save that goal.");return}
-  goals.push(data);goalForm.reset();renderGoals();toast("Goal saved!");
+goalForm.addEventListener("submit",e=>{
+  e.preventDefault(); toast("Goal saving comes next — authentication is now being tested.");
 });
 
 const authGate=document.getElementById("authGate");
@@ -330,77 +359,76 @@ function setAuthMessage(msg,error=false){
   authMsg.textContent=msg;
   authMsg.className="auth-msg"+(error?" auth-error":"");
 }
-function authWithTimeout(promise){
-  return Promise.race([
-    promise,
-    new Promise((_,reject)=>setTimeout(()=>reject(new Error("Supabase did not respond within 15 seconds.")),15000))
-  ]);
-}
 function credentials(){
   const email=document.getElementById("authEmail").value.trim();
   const password=document.getElementById("authPassword").value;
-  if(!email){throw new Error("Enter your email address.");}
-  if(password.length<6){throw new Error("Password must be at least 6 characters.");}
+  if(!email) throw new Error("Enter your email address.");
+  if(password.length<6) throw new Error("Password must be at least 6 characters.");
   return {email,password};
 }
-async function doSignIn(){
-  try{
-    const {email,password}=credentials();
-    authSubmit.disabled=true; createSubmit.disabled=true;
-    setAuthMessage("Signing in...");
-    const result=await authWithTimeout(supabase.auth.signInWithPassword({email,password}));
-    if(result.error) throw result.error;
-    if(!result.data.user) throw new Error("Supabase did not return a user.");
-    await startApp(result.data.user);
-  }catch(err){
-    console.error(err);
-    setAuthMessage(err?.message||"Sign in failed.",true);
-  }finally{
-    authSubmit.disabled=false; createSubmit.disabled=false;
-  }
-}
 async function doCreateAccount(){
+  createSubmit.disabled=true; authSubmit.disabled=true;
   try{
     const {email,password}=credentials();
-    authSubmit.disabled=true; createSubmit.disabled=true;
     setAuthMessage("Creating account...");
-    const result=await authWithTimeout(supabase.auth.signUp({
-      email,password,
-      options:{emailRedirectTo:window.location.href.split("#")[0].split("?")[0]}
-    }));
-    if(result.error) throw result.error;
-    if(!result.data.user) throw new Error("Supabase did not create the user.");
-    if(result.data.session){
+    const data=await supabaseRequest("/auth/v1/signup",{
+      method:"POST",
+      body:JSON.stringify({email,password})
+    });
+    if(data.access_token) saveSession(data);
+    if(data.user && data.access_token){
       setAuthMessage("Account created! Opening Chaos Coordinator...");
-      await startApp(result.data.user);
+      await startApp(data.user);
+    }else if(data.user){
+      setAuthMessage("Account created! Check your email for the confirmation message, then come back and sign in.");
     }else{
-      setAuthMessage("Account created! Check your email for Supabase's confirmation message, then return here and sign in.");
+      setAuthMessage("Supabase responded, but did not return a user. Tell me exactly what you see.",true);
     }
   }catch(err){
     console.error(err);
-    setAuthMessage(err?.message||"Account creation failed.",true);
+    setAuthMessage("Create account error: "+(err.message||String(err)),true);
   }finally{
-    authSubmit.disabled=false; createSubmit.disabled=false;
+    createSubmit.disabled=false; authSubmit.disabled=false;
+  }
+}
+async function doSignIn(){
+  createSubmit.disabled=true; authSubmit.disabled=true;
+  try{
+    const {email,password}=credentials();
+    setAuthMessage("Signing in...");
+    const data=await supabaseRequest("/auth/v1/token?grant_type=password",{
+      method:"POST",
+      body:JSON.stringify({email,password})
+    });
+    saveSession(data);
+    if(!data.user) throw new Error("Supabase did not return a user.");
+    await startApp(data.user);
+  }catch(err){
+    console.error(err);
+    setAuthMessage("Sign in error: "+(err.message||String(err)),true);
+  }finally{
+    createSubmit.disabled=false; authSubmit.disabled=false;
   }
 }
 authForm.addEventListener("submit",e=>{e.preventDefault();doSignIn();});
 createSubmit.addEventListener("click",e=>{e.preventDefault();doCreateAccount();});
 
-document.getElementById("signOutBtn").addEventListener("click",async()=>{
-  await supabase.auth.signOut();
-  currentUser=null;events=[];goals=[];renderEvents();renderGoals();
-  authForm.reset();setAuthMessage("");authGate.style.display="grid";
+async function startApp(user){
+  currentUser=user;
+  userEmail.textContent=user.email||"Account";
+  authGate.style.display="none";
+  await Promise.all([loadEvents(),loadGoals()]);
+}
+
+document.getElementById("signOutBtn").addEventListener("click",()=>{
+  clearSession();
+  currentUser=null; events=[]; goals=[]; renderEvents(); renderGoals();
+  authForm.reset(); setAuthMessage(""); authGate.style.display="grid";
 });
 
-supabase.auth.onAuthStateChange(async (event,session)=>{
-  if(session?.user && !currentUser) await startApp(session.user);
-  if(!session?.user){currentUser=null;authGate.style.display="grid";}
-});
+const restored=restoreSession();
+if(restored?.user) startApp(restored.user);
 
-(async()=>{
-  const {data}=await supabase.auth.getSession();
-  if(data.session?.user) await startApp(data.session.user);
-})();
 
 </script>
 </body>
