@@ -89,6 +89,17 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
 @media(max-width:650px){.formgrid{grid-template-columns:1fr}.formgrid .primary{grid-column:auto}}
 @media(max-width:900px){.app{grid-template-columns:210px 1fr}.grid{grid-template-columns:1fr 1fr}.wide{grid-column:span 2}.quickgrid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.app{display:block}.sidebar{display:none}main{padding:20px 15px 90px}.topbar{align-items:flex-start}.top-actions .profile span:last-child{display:none}.hero{padding:20px}.hero:after{font-size:25px;right:15px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:5;background:#0d1220f5;border-top:1px solid var(--line);justify-content:space-around;padding:8px 3px calc(8px + env(safe-area-inset-bottom));backdrop-filter:blur(12px)}.mobile-nav button{background:none;border:0;color:var(--muted);font-size:10px;display:grid;gap:2px;justify-items:center;padding:3px}.mobile-nav button b{font-size:18px}.mobile-nav button.active{color:var(--pink)}}
+
+.more-sheet{display:none}
+@media(max-width:650px){
+  .more-sheet.open{display:block;position:fixed;inset:0;z-index:80;background:#0008}
+  .more-panel{position:absolute;left:12px;right:12px;bottom:78px;background:#111827;border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:0 20px 60px #000a}
+  .more-panel h3{margin:2px 4px 10px;font-size:16px}
+  .more-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .more-grid button{border:1px solid var(--line);background:#192238;color:var(--text);border-radius:12px;padding:13px 10px;text-align:left;font-weight:700}
+  .more-grid button span{display:block;color:var(--muted);font-size:10px;font-weight:500;margin-top:2px}
+  .more-grid .danger{color:#ff9cdb}
+}
 </style>
 </head>
 <body>
@@ -118,7 +129,7 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v6 · Calendar + Goals sync</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v6.1 · Mobile More menu</div>
   </div>
 </div>
 
@@ -208,7 +219,20 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
 </main>
 </div>
 <div class="mobile-nav" id="mobileNav">
-  <button class="active" data-view="home"><b>⌂</b>Home</button><button data-view="housekeeping"><b>🧹</b>Chores</button><button data-view="projects"><b>⚒</b>Projects</button><button data-view="groceries"><b>🛒</b>Groceries</button><button data-view="finances"><b>☰</b>More</button>
+  <button class="active" data-view="home"><b>⌂</b>Home</button><button data-view="housekeeping"><b>🧹</b>Chores</button><button data-view="projects"><b>⚒</b>Projects</button><button data-view="groceries"><b>🛒</b>Groceries</button><button id="mobileMoreBtn" type="button"><b>☰</b>More</button>
+</div>
+<div class="more-sheet" id="moreSheet" aria-hidden="true">
+  <div class="more-panel">
+    <h3>More Chaos ✦</h3>
+    <div class="more-grid">
+      <button type="button" data-mobile-go="calendar">📅 Calendar<span>Appointments & plans</span></button>
+      <button type="button" data-mobile-go="goals">🎯 Goals<span>Things you're working toward</span></button>
+      <button type="button" data-mobile-go="finances">💵 Bills & Finances<span>Money stuff</span></button>
+      <button type="button" data-mobile-go="projects">⚒️ Projects<span>Build, fix & create</span></button>
+      <button type="button" data-mobile-go="settings">⚙️ Settings<span>Customize Chaos Coordinator</span></button>
+      <button type="button" class="danger" id="mobileSignOutBtn">🚪 Sign Out<span>See you later, chaos goblin</span></button>
+    </div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -265,6 +289,17 @@ const labels={home:"Dashboard",housekeeping:"Housekeeping",projects:"Projects",g
 function show(view){document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===view));document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===view));document.getElementById('pageTitle').textContent=labels[view]||"Dashboard";window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.view)));
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.go)));
+
+const moreSheet=document.getElementById("moreSheet");
+const mobileMoreBtn=document.getElementById("mobileMoreBtn");
+function openMore(){moreSheet.classList.add("open");moreSheet.setAttribute("aria-hidden","false")}
+function closeMore(){moreSheet.classList.remove("open");moreSheet.setAttribute("aria-hidden","true")}
+mobileMoreBtn.addEventListener("click",openMore);
+moreSheet.addEventListener("click",e=>{if(e.target===moreSheet)closeMore()});
+document.querySelectorAll("[data-mobile-go]").forEach(b=>b.addEventListener("click",()=>{
+  show(b.dataset.mobileGo); closeMore();
+}));
+
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',2400)}
 document.getElementById('helpBtn').addEventListener('click',()=>toast('This is your first working prototype. More features are coming!'));
 function updateCount(){const checks=[...document.querySelectorAll('.focuscheck')];const done=checks.filter(c=>c.checked).length;document.getElementById('taskCount').textContent=`${done} of ${checks.length} done`;checks.forEach(c=>c.closest('.task').classList.toggle('done',c.checked))}
@@ -480,6 +515,10 @@ document.getElementById("signOutBtn").addEventListener("click",()=>{
   clearSession();
   currentUser=null; events=[]; goals=[]; renderEvents(); renderGoals();
   authForm.reset(); setAuthMessage(""); authGate.style.display="grid";
+});
+document.getElementById("mobileSignOutBtn").addEventListener("click",()=>{
+  closeMore();
+  document.getElementById("signOutBtn").click();
 });
 
 const restored=restoreSession();
