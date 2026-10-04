@@ -205,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v12 · Food & Groceries</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v12.1 · Master Food List</div>
   </div>
 </div>
 
@@ -363,6 +363,10 @@ input,select,textarea,button{max-width:100%}
       <label class="field" style="grid-column:1/-1"><span><input id="foodStaple" type="checkbox" style="width:auto;margin-right:8px">Staple — I usually want this kept in the house</span></label>
       <button class="primary" type="submit">＋ Add item</button>
     </form>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+      <button id="openFoodMaster" type="button">📚 Browse Master Food List</button>
+      <p style="margin:8px 0 0;color:var(--muted);font-size:12px">Pick common foods instead of typing everything one item at a time.</p>
+    </div>
   </div>
 
   <div class="card">
@@ -486,6 +490,21 @@ input,select,textarea,button{max-width:100%}
     <div class="card" style="margin-top:14px;padding:14px">
       <h2 style="margin-top:0">Project steps <span id="projectStepCount">0 steps</span></h2>
       <div id="projectStepList" class="empty">No steps yet. Give the goblin something to do. ✦</div>
+    </div>
+  </div>
+</div>
+<div class="cc-modal" id="foodMasterModal" aria-hidden="true">
+  <div class="cc-modal-card" style="width:min(760px,100%)">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+      <div><div class="eyebrow">MASTER FOOD LIST</div><h2 style="margin-bottom:4px">Pick what belongs in your kitchen</h2><p style="margin-top:0">Tap anything you normally keep around, then add the selected items. Nothing gets added until you say so.</p></div>
+      <button id="closeFoodMaster" type="button">Close</button>
+    </div>
+    <label class="field">Find something<input id="foodMasterSearch" placeholder="Search milk, pasta, coffee..."></label>
+    <div id="foodMasterCategories" class="chore-filter" style="margin:12px 0"></div>
+    <div id="foodMasterList"></div>
+    <div style="position:sticky;bottom:0;background:#0f1728;padding:12px 0 2px;border-top:1px solid var(--line);margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button id="addSelectedMasterFoods" class="primary" type="button">Add Selected</button>
+      <small id="masterFoodSelectedCount">0 selected</small>
     </div>
   </div>
 </div>
@@ -1010,6 +1029,67 @@ document.getElementById("projectStepForm").addEventListener("submit",async e=>{
   }catch(err){console.error(err);toast("Couldn't add that project step: "+(err.message||"unknown error"))}
 });
 
+
+
+// ---- Master Food List (v12.1) ----
+const masterFoods={
+  "Dairy & Eggs":[["Milk","fridge"],["Eggs","fridge"],["Butter","fridge"],["Cheddar cheese","fridge"],["Mozzarella cheese","fridge"],["Parmesan cheese","fridge"],["Cream cheese","fridge"],["Sour cream","fridge"],["Yogurt","fridge"],["Heavy cream","fridge"],["Coffee creamer","fridge"]],
+  "Meat & Seafood":[["Chicken breasts","freezer"],["Chicken thighs","freezer"],["Ground beef","freezer"],["Steak","freezer"],["Pork chops","freezer"],["Bacon","fridge"],["Sausage","freezer"],["Ham","fridge"],["Deli meat","fridge"],["Shrimp","freezer"],["Fish","freezer"],["Tuna","pantry"]],
+  "Produce":[["Apples","fridge"],["Bananas","pantry"],["Oranges","fridge"],["Lemons","fridge"],["Limes","fridge"],["Grapes","fridge"],["Strawberries","fridge"],["Blueberries","fridge"],["Potatoes","pantry"],["Onions","pantry"],["Garlic","pantry"],["Tomatoes","pantry"],["Lettuce","fridge"],["Spinach","fridge"],["Carrots","fridge"],["Celery","fridge"],["Bell peppers","fridge"],["Broccoli","fridge"],["Mushrooms","fridge"],["Cucumbers","fridge"]],
+  "Bread & Bakery":[["Bread","pantry"],["Hamburger buns","pantry"],["Hot dog buns","pantry"],["Tortillas","pantry"],["Bagels","pantry"],["English muffins","pantry"]],
+  "Pasta, Rice & Grains":[["Spaghetti","pantry"],["Pasta","pantry"],["Macaroni","pantry"],["Rice","pantry"],["Instant rice","pantry"],["Oatmeal","pantry"],["Breadcrumbs","pantry"],["Flour tortillas","pantry"]],
+  "Canned & Jarred":[["Tomato sauce","pantry"],["Diced tomatoes","pantry"],["Tomato paste","pantry"],["Pasta sauce","pantry"],["Black beans","pantry"],["Kidney beans","pantry"],["Baked beans","pantry"],["Corn","pantry"],["Green beans","pantry"],["Peas","pantry"],["Chicken broth","pantry"],["Beef broth","pantry"],["Cream of chicken soup","pantry"],["Cream of mushroom soup","pantry"],["Peanut butter","pantry"],["Jelly","pantry"]],
+  "Condiments & Sauces":[["Ketchup","fridge"],["Mustard","fridge"],["Mayonnaise","fridge"],["Ranch dressing","fridge"],["Italian dressing","fridge"],["Barbecue sauce","fridge"],["Hot sauce","fridge"],["Soy sauce","pantry"],["Worcestershire sauce","pantry"],["Pickles","fridge"]],
+  "Baking & Cooking":[["All-purpose flour","pantry"],["Sugar","pantry"],["Brown sugar","pantry"],["Powdered sugar","pantry"],["Baking powder","pantry"],["Baking soda","pantry"],["Vanilla extract","pantry"],["Chocolate chips","pantry"],["Cooking oil","pantry"],["Olive oil","pantry"],["Cooking spray","pantry"],["Cornstarch","pantry"]],
+  "Spices & Seasonings":[["Salt","pantry"],["Black pepper","pantry"],["Garlic powder","pantry"],["Onion powder","pantry"],["Paprika","pantry"],["Italian seasoning","pantry"],["Chili powder","pantry"],["Cinnamon","pantry"],["Taco seasoning","pantry"]],
+  "Breakfast":[["Cereal","pantry"],["Pancake mix","pantry"],["Maple syrup","pantry"],["Breakfast sausage","freezer"],["Frozen waffles","freezer"]],
+  "Snacks":[["Potato chips","pantry"],["Tortilla chips","pantry"],["Crackers","pantry"],["Popcorn","pantry"],["Pretzels","pantry"],["Cookies","pantry"],["Granola bars","pantry"],["Nuts","pantry"]],
+  "Drinks":[["Coffee","pantry"],["Tea","pantry"],["Bottled water","pantry"],["Soda","pantry"],["Juice","fridge"],["Hot cocoa","pantry"]],
+  "Frozen":[["Frozen vegetables","freezer"],["Frozen fruit","freezer"],["French fries","freezer"],["Tater tots","freezer"],["Frozen pizza","freezer"],["Ice cream","freezer"],["Garlic bread","freezer"]],
+  "Kitchen & Household":[["Paper towels","pantry"],["Napkins","pantry"],["Aluminum foil","pantry"],["Plastic wrap","pantry"],["Storage bags","pantry"],["Dish soap","pantry"],["Dishwasher detergent","pantry"],["Trash bags","pantry"]]
+};
+let masterFoodCategory="Dairy & Eggs",selectedMasterFoods=new Set();
+const foodMasterModal=document.getElementById("foodMasterModal");
+function masterKey(cat,name){return cat+"|||"+name}
+function renderMasterFoodCategories(){
+  const box=document.getElementById("foodMasterCategories");box.innerHTML="";
+  Object.keys(masterFoods).forEach(cat=>{const b=document.createElement("button");b.type="button";b.textContent=cat;b.classList.toggle("active",cat===masterFoodCategory);b.addEventListener("click",()=>{masterFoodCategory=cat;renderMasterFoodCategories();renderMasterFoods()});box.append(b)});
+}
+function renderMasterFoods(){
+  const box=document.getElementById("foodMasterList"),q=document.getElementById("foodMasterSearch").value.trim().toLowerCase();box.innerHTML="";
+  const cats=q?Object.keys(masterFoods):[masterFoodCategory];
+  let matches=0;
+  cats.forEach(cat=>{
+    const foods=masterFoods[cat].filter(([name])=>!q||name.toLowerCase().includes(q));if(!foods.length)return;
+    matches+=foods.length;
+    const h=document.createElement("h3");h.textContent=cat;box.append(h);
+    const wrap=document.createElement("div");wrap.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px";
+    foods.forEach(([name,location])=>{
+      const key=masterKey(cat,name),label=document.createElement("label");label.style.cssText="display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px;cursor:pointer";
+      const cb=document.createElement("input");cb.type="checkbox";cb.checked=selectedMasterFoods.has(key);cb.style.width="auto";
+      cb.addEventListener("change",()=>{cb.checked?selectedMasterFoods.add(key):selectedMasterFoods.delete(key);updateMasterSelectedCount()});
+      const text=document.createElement("span");text.textContent=name+" · "+location;label.append(cb,text);wrap.append(label);
+    });box.append(wrap);
+  });
+  if(!matches){box.className="empty";box.textContent="No matches. You can still add it manually. ✦"}else box.className="";
+}
+function updateMasterSelectedCount(){document.getElementById("masterFoodSelectedCount").textContent=selectedMasterFoods.size+" selected"}
+document.getElementById("openFoodMaster").addEventListener("click",()=>{selectedMasterFoods.clear();document.getElementById("foodMasterSearch").value="";renderMasterFoodCategories();renderMasterFoods();updateMasterSelectedCount();foodMasterModal.classList.add("open");foodMasterModal.setAttribute("aria-hidden","false")});
+function closeFoodMaster(){foodMasterModal.classList.remove("open");foodMasterModal.setAttribute("aria-hidden","true")}
+document.getElementById("closeFoodMaster").addEventListener("click",closeFoodMaster);
+foodMasterModal.addEventListener("click",e=>{if(e.target===foodMasterModal)closeFoodMaster()});
+document.getElementById("foodMasterSearch").addEventListener("input",renderMasterFoods);
+document.getElementById("addSelectedMasterFoods").addEventListener("click",async()=>{
+  if(!selectedMasterFoods.size){toast("Pick a few foods first. ✦");return}
+  const existing=new Set(foodItems.map(i=>(i.item||"").trim().toLowerCase()));
+  const rows=[];
+  selectedMasterFoods.forEach(key=>{const [cat,name]=key.split("|||"),found=(masterFoods[cat]||[]).find(([n])=>n===name);if(found&&!existing.has(name.toLowerCase()))rows.push({user_id:currentUser.id,item:name,quantity:null,purchased:false,location:found[1],stock_status:"have",staple:true,notes:null,updated_at:new Date().toISOString()})});
+  if(!rows.length){toast("Those foods are already in your kitchen list. ✦");return}
+  const btn=document.getElementById("addSelectedMasterFoods");btn.disabled=true;
+  try{await supabaseRequest("/rest/v1/groceries",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(rows)});await loadFood();closeFoodMaster();toast(rows.length+" staples added. Pantry bureaucracy avoided. ✦")}
+  catch(err){console.error(err);toast("Couldn't add those foods: "+(err.message||"unknown error"))}
+  finally{btn.disabled=false}
+});
 
 // ---- Food & Groceries (v12) ----
 let foodItems=[],foodTab="grocery";
