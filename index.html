@@ -205,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v12.1 · Master Food List</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13 · Bills & Finances</div>
   </div>
 </div>
 
@@ -380,7 +380,43 @@ input,select,textarea,button{max-width:100%}
     <div id="foodList" class="empty">Your grocery list is gloriously empty. ✦</div>
   </div>
 </section>
-  <section class="view" id="finances"><div class="card placeholder"><div><div class="big">💰</div><h2>Bills & Finances</h2><p>Track bills, monthly budgets, debt, and savings goals in one place.</p><button class="linkbtn" onclick="toast('Bills & Finances is ready for the next build step.')">Plan this section →</button></div></div></section>
+  <section class="view" id="finances">
+  <div class="hero">
+    <div class="eyebrow">COORDINATED-ISH™ FINANCES</div>
+    <h2>Know what's due. Pay it. Move on.</h2>
+    <p>A simple view of your bills without turning your life into an accounting department.</p>
+  </div>
+
+  <div class="stats" style="margin-bottom:16px">
+    <div class="stat"><span>Due this month</span><strong id="billMonthTotal">$0.00</strong></div>
+    <div class="stat"><span>Still due</span><strong id="billMonthDue">$0.00</strong></div>
+    <div class="stat"><span>Bills remaining</span><strong id="billRemainingCount">0</strong></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>Add a bill <span>Recurring or one-time</span></h2>
+    <form id="billForm" class="formgrid">
+      <label class="field">Bill name<input id="billName" required maxlength="120" placeholder="e.g. Electric"></label>
+      <label class="field">Amount<input id="billAmount" required type="number" min="0" step="0.01" placeholder="0.00"></label>
+      <label class="field">Due date<input id="billDue" required type="date"></label>
+      <label class="field">Repeats<select id="billRecurrence"><option value="monthly" selected>Monthly</option><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks</option><option value="quarterly">Every 3 months</option><option value="semiannual">Every 6 months</option><option value="yearly">Yearly</option><option value="none">One-time</option></select></label>
+      <label class="field">Category<select id="billCategory"><option>Housing</option><option>Utilities</option><option>Insurance</option><option>Phone / Internet</option><option>Transportation</option><option>Subscriptions</option><option>Debt</option><option>Medical</option><option selected>Other</option></select></label>
+      <label class="field"><span><input id="billAutopay" type="checkbox" style="width:auto;margin-right:8px">Autopay</span></label>
+      <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="billNotes" rows="2"></textarea></label>
+      <button class="primary" type="submit">＋ Add bill</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Bills <span id="billCount">0 bills</span></h2>
+    <div class="chore-filter">
+      <button type="button" class="active" data-bill-filter="upcoming">Upcoming</button>
+      <button type="button" data-bill-filter="all">All</button>
+      <button type="button" data-bill-filter="autopay">Autopay</button>
+    </div>
+    <div id="billList" class="empty">No bills yet. A suspiciously peaceful financial situation. ✦</div>
+  </div>
+</section>
   <section class="view" id="calendar">
     <div class="card" style="margin-bottom:16px">
       <h2>Plan something <span>Appointments, events, reminders</span></h2>
@@ -506,6 +542,22 @@ input,select,textarea,button{max-width:100%}
       <button id="addSelectedMasterFoods" class="primary" type="button">Add Selected</button>
       <small id="masterFoodSelectedCount">0 selected</small>
     </div>
+  </div>
+</div>
+<div class="cc-modal" id="billEditModal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2>Edit bill</h2>
+    <form id="billEditForm" class="formgrid">
+      <input id="editBillId" type="hidden">
+      <label class="field">Bill name<input id="editBillName" required maxlength="120"></label>
+      <label class="field">Amount<input id="editBillAmount" required type="number" min="0" step="0.01"></label>
+      <label class="field">Due date<input id="editBillDue" required type="date"></label>
+      <label class="field">Repeats<select id="editBillRecurrence"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks</option><option value="quarterly">Every 3 months</option><option value="semiannual">Every 6 months</option><option value="yearly">Yearly</option><option value="none">One-time</option></select></label>
+      <label class="field">Category<select id="editBillCategory"><option>Housing</option><option>Utilities</option><option>Insurance</option><option>Phone / Internet</option><option>Transportation</option><option>Subscriptions</option><option>Debt</option><option>Medical</option><option>Other</option></select></label>
+      <label class="field"><span><input id="editBillAutopay" type="checkbox" style="width:auto;margin-right:8px">Autopay</span></label>
+      <label class="field" style="grid-column:1/-1">Notes<textarea id="editBillNotes" rows="2"></textarea></label>
+      <div class="cc-modal-actions"><button id="cancelBillEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
+    </form>
   </div>
 </div>
 <script>
@@ -1157,6 +1209,66 @@ async function removeFood(i){
 }
 document.getElementById("foodLocation").addEventListener("change",e=>{document.getElementById("foodStatus").value=e.target.value==="grocery"?"out":"have"});
 
+
+// ---- Bills & Finances (v13) ----
+let bills=[],billFilter="upcoming";
+function money(v){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(v)||0)}
+function billRepeatLabel(r){return ({none:"One-time",weekly:"Weekly",biweekly:"Every 2 weeks",monthly:"Monthly",quarterly:"Every 3 months",semiannual:"Every 6 months",yearly:"Yearly"})[r]||"Monthly"}
+function advanceBillDate(dateStr,recurrence){
+  const d=new Date(dateStr+"T12:00:00");
+  if(recurrence==="weekly")d.setDate(d.getDate()+7);
+  else if(recurrence==="biweekly")d.setDate(d.getDate()+14);
+  else if(recurrence==="monthly")d.setMonth(d.getMonth()+1);
+  else if(recurrence==="quarterly")d.setMonth(d.getMonth()+3);
+  else if(recurrence==="semiannual")d.setMonth(d.getMonth()+6);
+  else if(recurrence==="yearly")d.setFullYear(d.getFullYear()+1);
+  return d.toISOString().slice(0,10);
+}
+function renderBills(){
+  const now=new Date(),month=now.getMonth(),year=now.getFullYear();
+  const thisMonth=bills.filter(b=>{if(!b.due_date)return false;const d=new Date(b.due_date+"T12:00:00");return d.getMonth()===month&&d.getFullYear()===year});
+  const monthTotal=thisMonth.reduce((s,b)=>s+Number(b.amount||0),0),stillDue=thisMonth.filter(b=>!b.paid).reduce((s,b)=>s+Number(b.amount||0),0),remaining=thisMonth.filter(b=>!b.paid).length;
+  document.getElementById("billMonthTotal").textContent=money(monthTotal);document.getElementById("billMonthDue").textContent=money(stillDue);document.getElementById("billRemainingCount").textContent=remaining;
+  document.getElementById("billCount").textContent=bills.length+" bill"+(bills.length===1?"":"s");
+  let shown=bills.slice();if(billFilter==="upcoming")shown=shown.filter(b=>!b.paid);if(billFilter==="autopay")shown=shown.filter(b=>b.autopay);
+  shown.sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
+  const list=document.getElementById("billList");list.innerHTML="";
+  if(!shown.length){list.className="empty";list.textContent=billFilter==="upcoming"?"Nothing waiting to be paid. The money goblin approves. ✦":"No bills here. ✦";return}
+  list.className="";
+  shown.forEach(b=>{
+    const row=document.createElement("div");row.className="entry";
+    const main=document.createElement("div");main.className="entry-main";
+    const title=document.createElement("strong");title.textContent=b.name+" · "+money(b.amount);
+    const meta=document.createElement("small");meta.textContent=(b.paid?"Paid":"Due "+prettyDate(b.due_date))+" · "+(b.category||"Other")+" · "+billRepeatLabel(b.recurrence)+(b.autopay?" · Autopay":"");
+    main.append(title,meta);if(b.notes){const note=document.createElement("small");note.textContent=b.notes;main.append(note)}
+    const actions=document.createElement("div");actions.className="chore-actions";
+    if(!b.paid){const paid=document.createElement("button");paid.type="button";paid.textContent="Paid ✓";paid.addEventListener("click",()=>payBill(b));actions.append(paid)}
+    const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openBillEdit(b));
+    const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeBill(b));actions.append(edit,del);row.append(main,actions);list.append(row);
+  });
+}
+async function loadBills(){try{const data=await supabaseRequest("/rest/v1/bills?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});bills=Array.isArray(data)?data:[];renderBills()}catch(err){console.error(err);toast("Couldn't load bills.")}}
+document.getElementById("billForm").addEventListener("submit",async e=>{
+  e.preventDefault();const name=document.getElementById("billName").value.trim(),amount=Number(document.getElementById("billAmount").value),due_date=document.getElementById("billDue").value,recurrence=document.getElementById("billRecurrence").value,category=document.getElementById("billCategory").value,autopay=document.getElementById("billAutopay").checked,notes=document.getElementById("billNotes").value.trim();
+  try{await supabaseRequest("/rest/v1/bills",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,name,amount,due_date,paid:false,recurring:recurrence!=="none",recurrence,category,autopay,notes,updated_at:new Date().toISOString()})});document.getElementById("billForm").reset();document.getElementById("billRecurrence").value="monthly";document.getElementById("billCategory").value="Other";await loadBills();toast("Bill added. Money goblin is watching it. ✦")}catch(err){console.error(err);toast("Couldn't add that bill: "+(err.message||"unknown error"))}
+});
+document.querySelectorAll("[data-bill-filter]").forEach(b=>b.addEventListener("click",()=>{billFilter=b.dataset.billFilter;document.querySelectorAll("[data-bill-filter]").forEach(x=>x.classList.toggle("active",x===b));renderBills()}));
+async function payBill(b){
+  try{
+    if((b.recurrence||"monthly")==="none"){await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:true,updated_at:new Date().toISOString()})});toast("Paid. Done and dusted. ✦")}
+    else{const next=advanceBillDate(b.due_date,b.recurrence||"monthly");await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:false,due_date:next,updated_at:new Date().toISOString()})});toast("Paid! Next due date moved forward. ✦")}
+    await loadBills();
+  }catch(err){console.error(err);toast("Couldn't update that bill.")}
+}
+function openBillEdit(b){document.getElementById("editBillId").value=b.id;document.getElementById("editBillName").value=b.name;document.getElementById("editBillAmount").value=b.amount;document.getElementById("editBillDue").value=b.due_date||"";document.getElementById("editBillRecurrence").value=b.recurrence||"monthly";document.getElementById("editBillCategory").value=b.category||"Other";document.getElementById("editBillAutopay").checked=!!b.autopay;document.getElementById("editBillNotes").value=b.notes||"";document.getElementById("billEditModal").classList.add("open");document.getElementById("billEditModal").setAttribute("aria-hidden","false")}
+function closeBillEdit(){document.getElementById("billEditModal").classList.remove("open");document.getElementById("billEditModal").setAttribute("aria-hidden","true")}
+document.getElementById("cancelBillEdit").addEventListener("click",closeBillEdit);document.getElementById("billEditModal").addEventListener("click",e=>{if(e.target.id==="billEditModal")closeBillEdit()});
+document.getElementById("billEditForm").addEventListener("submit",async e=>{
+  e.preventDefault();const id=document.getElementById("editBillId").value,recurrence=document.getElementById("editBillRecurrence").value,payload={name:document.getElementById("editBillName").value.trim(),amount:Number(document.getElementById("editBillAmount").value),due_date:document.getElementById("editBillDue").value,recurrence,recurring:recurrence!=="none",category:document.getElementById("editBillCategory").value,autopay:document.getElementById("editBillAutopay").checked,notes:document.getElementById("editBillNotes").value.trim(),updated_at:new Date().toISOString()};
+  try{await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeBillEdit();await loadBills();toast("Bill updated.")}catch(err){console.error(err);toast("Couldn't save that bill.")}
+});
+async function removeBill(b){if(!confirm("Remove "+b.name+"?"))return;try{await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadBills();toast("Bill removed.")}catch(err){console.error(err);toast("Couldn't remove that bill.")}}
+
 // ---- Session refresh (v7.2) ----
 async function refreshSession(){
   const saved=JSON.parse(localStorage.getItem("chaos_coordinator_session_v5")||"null");
@@ -1262,7 +1374,7 @@ async function startApp(user){
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
@@ -1285,7 +1397,7 @@ async function refreshCloudView(){
   if(now-ccLastCloudRefresh<5000)return;
   ccLastCloudRefresh=now;
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills()]);
   await loadHousekeepingSettings();
   renderLiveDashboard();
 }
