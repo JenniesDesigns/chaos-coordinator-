@@ -205,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.2 · Payday View</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.2.1 · Linked Debt Payments</div>
   </div>
 </div>
 
@@ -447,6 +447,7 @@ input,select,textarea,button{max-width:100%}
       <label class="field">Due date<input id="billDue" required type="date"></label>
       <label class="field">Repeats<select id="billRecurrence"><option value="monthly" selected>Monthly</option><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks</option><option value="quarterly">Every 3 months</option><option value="semiannual">Every 6 months</option><option value="yearly">Yearly</option><option value="none">One-time</option></select></label>
       <label class="field">Category<select id="billCategory"><option>Housing</option><option>Utilities</option><option>Insurance</option><option>Phone / Internet</option><option>Transportation</option><option>Subscriptions</option><option>Debt</option><option>Medical</option><option selected>Other</option></select></label>
+      <label class="field">Linked debt <span style="font-weight:400">(optional)</span><select id="billLinkedDebt"><option value="">None</option></select></label>
       <label class="field"><span><input id="billAutopay" type="checkbox" style="width:auto;margin-right:8px">Autopay</span></label>
       <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="billNotes" rows="2"></textarea></label>
       <button class="primary" type="submit">＋ Add bill</button>
@@ -640,6 +641,7 @@ input,select,textarea,button{max-width:100%}
       </label>
       <label class="field">Repeats<select id="editBillRecurrence"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks</option><option value="quarterly">Every 3 months</option><option value="semiannual">Every 6 months</option><option value="yearly">Yearly</option><option value="none">One-time</option></select></label>
       <label class="field">Category<select id="editBillCategory"><option>Housing</option><option>Utilities</option><option>Insurance</option><option>Phone / Internet</option><option>Transportation</option><option>Subscriptions</option><option>Debt</option><option>Medical</option><option>Other</option></select></label>
+      <label class="field">Linked debt <span style="font-weight:400">(optional)</span><select id="editBillLinkedDebt"><option value="">None</option></select></label>
       <label class="field"><span><input id="editBillAutopay" type="checkbox" style="width:auto;margin-right:8px">Autopay</span></label>
       <label class="field" style="grid-column:1/-1">Notes<textarea id="editBillNotes" rows="2"></textarea></label>
       <div class="cc-modal-actions"><button id="cancelBillEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
@@ -673,6 +675,17 @@ input,select,textarea,button{max-width:100%}
         <button id="saveDateFallback" class="primary" type="button">Use this date</button>
       </div>
     </div>
+  </div>
+</div>
+<div class="cc-modal" id="linkedDebtPaymentModal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2>Pay linked debt bill</h2>
+    <p id="linkedDebtPaymentText">How much did you actually pay?</p>
+    <form id="linkedDebtPaymentForm" class="formgrid">
+      <input id="linkedDebtBillId" type="hidden">
+      <label class="field">Amount actually paid<input id="linkedDebtPaymentAmount" required type="number" min="0.01" step="0.01"></label>
+      <div class="cc-modal-actions"><button id="cancelLinkedDebtPayment" type="button">Cancel</button><button class="primary" type="submit">Record payment</button></div>
+    </form>
   </div>
 </div>
 <script>
@@ -1325,6 +1338,35 @@ async function removeFood(i){
 document.getElementById("foodLocation").addEventListener("change",e=>{document.getElementById("foodStatus").value=e.target.value==="grocery"?"out":"have"});
 
 
+
+// ---- Linked Debt Payments (v13.2.1) ----
+function refreshDebtSelectors(){
+  [document.getElementById("billLinkedDebt"),document.getElementById("editBillLinkedDebt")].forEach(sel=>{
+    if(!sel)return;const keep=sel.value;sel.innerHTML='<option value="">None</option>';
+    debts.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).forEach(d=>{const o=document.createElement("option");o.value=d.id;o.textContent=d.name+" · "+money(d.balance||0)+" remaining";sel.append(o)});
+    if([...sel.options].some(o=>o.value===keep))sel.value=keep;
+  });
+}
+function linkedDebtName(id){const d=debts.find(x=>x.id===id);return d?d.name:"Linked debt"}
+function openLinkedDebtPayment(b){
+  document.getElementById("linkedDebtBillId").value=b.id;
+  document.getElementById("linkedDebtPaymentAmount").value=Number(b.amount||0).toFixed(2);
+  document.getElementById("linkedDebtPaymentText").textContent="How much did you actually pay toward "+linkedDebtName(b.linked_debt_id)+"?";
+  const m=document.getElementById("linkedDebtPaymentModal");m.classList.add("open");m.setAttribute("aria-hidden","false");
+}
+function closeLinkedDebtPayment(){const m=document.getElementById("linkedDebtPaymentModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
+document.getElementById("cancelLinkedDebtPayment").addEventListener("click",closeLinkedDebtPayment);
+document.getElementById("linkedDebtPaymentModal").addEventListener("click",e=>{if(e.target.id==="linkedDebtPaymentModal")closeLinkedDebtPayment()});
+document.getElementById("linkedDebtPaymentForm").addEventListener("submit",async e=>{
+  e.preventDefault();const id=document.getElementById("linkedDebtBillId").value,amount=Number(document.getElementById("linkedDebtPaymentAmount").value),b=bills.find(x=>x.id===id);
+  if(!b||!b.linked_debt_id||!(amount>0))return;const d=debts.find(x=>x.id===b.linked_debt_id);if(!d){toast("That linked debt couldn't be found.");return}
+  try{
+    const nextBalance=Math.max(0,Number(d.balance||0)-amount);
+    await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(d.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({balance:nextBalance,updated_at:new Date().toISOString()})});
+    await completeBillPayment(b);closeLinkedDebtPayment();await Promise.all([loadDebts(),loadBills()]);
+    toast(nextBalance===0?"Bill paid and DEBT DESTROYED. 🎉":"Bill paid and "+money(amount)+" knocked off "+d.name+". ✦");
+  }catch(err){console.error(err);toast("Couldn't record that linked payment.")}
+});
 // ---- Bills & Finances (v13) ----
 let bills=[],billFilter="upcoming";
 function money(v){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(v)||0)}
@@ -1354,7 +1396,7 @@ function renderBills(){
     const row=document.createElement("div");row.className="entry";
     const main=document.createElement("div");main.className="entry-main";
     const title=document.createElement("strong");title.textContent=b.name+" · "+money(b.amount);
-    const meta=document.createElement("small");meta.textContent=(b.paid?"Paid":"Due "+prettyDate(b.due_date))+" · "+(b.category||"Other")+" · "+billRepeatLabel(b.recurrence)+(b.autopay?" · Autopay":"");
+    const meta=document.createElement("small");meta.textContent=(b.paid?"Paid":"Due "+prettyDate(b.due_date))+" · "+(b.category||"Other")+" · "+billRepeatLabel(b.recurrence)+(b.autopay?" · Autopay":"")+(b.linked_debt_id?" · Linked to "+linkedDebtName(b.linked_debt_id):"");
     main.append(title,meta);if(b.notes){const note=document.createElement("small");note.textContent=b.notes;main.append(note)}
     const actions=document.createElement("div");actions.className="chore-actions";
     if(!b.paid){const paid=document.createElement("button");paid.type="button";paid.textContent="Paid ✓";paid.addEventListener("click",()=>payBill(b));actions.append(paid)}
@@ -1365,22 +1407,24 @@ function renderBills(){
 }
 async function loadBills(){try{const data=await supabaseRequest("/rest/v1/bills?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});bills=Array.isArray(data)?data:[];renderBills()}catch(err){console.error(err);toast("Couldn't load bills.")}}
 document.getElementById("billForm").addEventListener("submit",async e=>{
-  e.preventDefault();const name=document.getElementById("billName").value.trim(),amount=Number(document.getElementById("billAmount").value),due_date=document.getElementById("billDue").value,recurrence=document.getElementById("billRecurrence").value,category=document.getElementById("billCategory").value,autopay=document.getElementById("billAutopay").checked,notes=document.getElementById("billNotes").value.trim();
-  try{await supabaseRequest("/rest/v1/bills",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,name,amount,due_date,paid:false,recurring:recurrence!=="none",recurrence,category,autopay,notes,updated_at:new Date().toISOString()})});document.getElementById("billForm").reset();document.getElementById("billRecurrence").value="monthly";document.getElementById("billCategory").value="Other";await loadBills();toast("Bill added. Money goblin is watching it. ✦")}catch(err){console.error(err);toast("Couldn't add that bill: "+(err.message||"unknown error"))}
+  e.preventDefault();const name=document.getElementById("billName").value.trim(),amount=Number(document.getElementById("billAmount").value),due_date=document.getElementById("billDue").value,recurrence=document.getElementById("billRecurrence").value,category=document.getElementById("billCategory").value,autopay=document.getElementById("billAutopay").checked,notes=document.getElementById("billNotes").value.trim(),linked_debt_id=document.getElementById("billLinkedDebt").value||null;
+  try{await supabaseRequest("/rest/v1/bills",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,name,amount,due_date,paid:false,recurring:recurrence!=="none",recurrence,category,autopay,notes,linked_debt_id,updated_at:new Date().toISOString()})});document.getElementById("billForm").reset();document.getElementById("billRecurrence").value="monthly";document.getElementById("billCategory").value="Other";await loadBills();toast("Bill added. Money goblin is watching it. ✦")}catch(err){console.error(err);toast("Couldn't add that bill: "+(err.message||"unknown error"))}
 });
 document.querySelectorAll("[data-bill-filter]").forEach(b=>b.addEventListener("click",()=>{billFilter=b.dataset.billFilter;document.querySelectorAll("[data-bill-filter]").forEach(x=>x.classList.toggle("active",x===b));renderBills()}));
-async function payBill(b){
-  try{
-    if((b.recurrence||"monthly")==="none"){await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:true,updated_at:new Date().toISOString()})});toast("Paid. Done and dusted. ✦")}
-    else{const next=advanceBillDate(b.due_date,b.recurrence||"monthly");await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:false,due_date:next,updated_at:new Date().toISOString()})});toast("Paid! Next due date moved forward. ✦")}
-    await loadBills();
-  }catch(err){console.error(err);toast("Couldn't update that bill.")}
+async function completeBillPayment(b){
+  if((b.recurrence||"monthly")==="none")await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:true,updated_at:new Date().toISOString()})});
+  else{const next=advanceBillDate(b.due_date,b.recurrence||"monthly");await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:false,due_date:next,updated_at:new Date().toISOString()})})}
 }
-function openBillEdit(b){document.getElementById("editBillId").value=b.id;document.getElementById("editBillName").value=b.name;document.getElementById("editBillAmount").value=b.amount;document.getElementById("editBillDue").value=b.due_date||"";document.getElementById("editBillRecurrence").value=b.recurrence||"monthly";document.getElementById("editBillCategory").value=b.category||"Other";document.getElementById("editBillAutopay").checked=!!b.autopay;document.getElementById("editBillNotes").value=b.notes||"";document.getElementById("billEditModal").classList.add("open");document.getElementById("billEditModal").setAttribute("aria-hidden","false")}
+async function payBill(b){
+  if(b.linked_debt_id){openLinkedDebtPayment(b);return}
+  try{await completeBillPayment(b);toast((b.recurrence||"monthly")==="none"?"Paid. Done and dusted. ✦":"Paid! Next due date moved forward. ✦");await loadBills()}
+  catch(err){console.error(err);toast("Couldn't update that bill.")}
+}
+function openBillEdit(b){document.getElementById("editBillId").value=b.id;document.getElementById("editBillName").value=b.name;document.getElementById("editBillAmount").value=b.amount;document.getElementById("editBillDue").value=b.due_date||"";document.getElementById("editBillRecurrence").value=b.recurrence||"monthly";document.getElementById("editBillCategory").value=b.category||"Other";refreshDebtSelectors();document.getElementById("editBillLinkedDebt").value=b.linked_debt_id||"";document.getElementById("editBillAutopay").checked=!!b.autopay;document.getElementById("editBillNotes").value=b.notes||"";document.getElementById("billEditModal").classList.add("open");document.getElementById("billEditModal").setAttribute("aria-hidden","false")}
 function closeBillEdit(){document.getElementById("billEditModal").classList.remove("open");document.getElementById("billEditModal").setAttribute("aria-hidden","true")}
 document.getElementById("cancelBillEdit").addEventListener("click",closeBillEdit);document.getElementById("billEditModal").addEventListener("click",e=>{if(e.target.id==="billEditModal")closeBillEdit()});
 document.getElementById("billEditForm").addEventListener("submit",async e=>{
-  e.preventDefault();const id=document.getElementById("editBillId").value,recurrence=document.getElementById("editBillRecurrence").value,payload={name:document.getElementById("editBillName").value.trim(),amount:Number(document.getElementById("editBillAmount").value),due_date:document.getElementById("editBillDue").value,recurrence,recurring:recurrence!=="none",category:document.getElementById("editBillCategory").value,autopay:document.getElementById("editBillAutopay").checked,notes:document.getElementById("editBillNotes").value.trim(),updated_at:new Date().toISOString()};
+  e.preventDefault();const id=document.getElementById("editBillId").value,recurrence=document.getElementById("editBillRecurrence").value,payload={name:document.getElementById("editBillName").value.trim(),amount:Number(document.getElementById("editBillAmount").value),due_date:document.getElementById("editBillDue").value,recurrence,recurring:recurrence!=="none",category:document.getElementById("editBillCategory").value,linked_debt_id:document.getElementById("editBillLinkedDebt").value||null,autopay:document.getElementById("editBillAutopay").checked,notes:document.getElementById("editBillNotes").value.trim(),updated_at:new Date().toISOString()};
   try{await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeBillEdit();await loadBills();toast("Bill updated.")}catch(err){console.error(err);toast("Couldn't save that bill.")}
 });
 async function removeBill(b){if(!confirm("Remove "+b.name+"?"))return;try{await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadBills();toast("Bill removed.")}catch(err){console.error(err);toast("Couldn't remove that bill.")}}
@@ -1405,7 +1449,7 @@ function renderDebts(){
   document.getElementById("debtPaidOff").textContent=money(Math.max(0,original-total));
   document.getElementById("debtCount").textContent=debts.length+" debt"+(debts.length===1?"":"s");
   const list=document.getElementById("debtList");list.innerHTML="";
-  if(!debts.length){list.className="empty";list.textContent="No debts added. ✦";return}
+  if(!debts.length){list.className="empty";list.textContent="No debts added. ✦";refreshDebtSelectors();return}
   list.className="";
   debts.forEach(d=>{
     const orig=Number(d.original_balance||d.balance||0),bal=Number(d.balance||0),paid=Math.max(0,orig-bal),percent=orig?Math.round((paid/orig)*100):0;
@@ -1425,6 +1469,7 @@ function renderDebts(){
     const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeDebt(d));
     actions.append(pay,del);row.append(main,actions);list.append(row);
   });
+  refreshDebtSelectors();
 }
 document.getElementById("debtForm").addEventListener("submit",async e=>{
   e.preventDefault();
@@ -1577,7 +1622,7 @@ function renderPayday(){
     const row=document.createElement("div");row.className="entry";
     const main=document.createElement("div");main.className="entry-main";
     const title=document.createElement("strong");title.textContent=b.name+" · "+money(b.amount);
-    const meta=document.createElement("small");meta.textContent="Due "+prettyDate(b.due_date)+(b.autopay?" · Autopay":"");
+    const meta=document.createElement("small");meta.textContent="Due "+prettyDate(b.due_date)+(b.autopay?" · Autopay":"")+(b.linked_debt_id?" · "+linkedDebtName(b.linked_debt_id):"");
     main.append(title,meta);
     const actions=document.createElement("div");actions.className="chore-actions";
     const paid=document.createElement("button");paid.type="button";paid.textContent="Paid ✓";paid.addEventListener("click",()=>payBill(b));
