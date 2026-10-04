@@ -201,7 +201,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.6 · Inside + Outside</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.7 · Housekeeping repair</div>
   </div>
 </div>
 
@@ -597,7 +597,15 @@ const defaultSpaces=[
   {name:"Office",area:"inside"},{name:"Bedroom",area:"inside"},
   {name:"Yard",area:"outside"},{name:"Garden",area:"outside"},{name:"Patio / deck",area:"outside"}
 ];
-let spaces=JSON.parse(localStorage.getItem("cc_spaces_v86")||"null")||defaultSpaces.slice();
+function loadSpaces(){
+  let saved=null;try{saved=JSON.parse(localStorage.getItem("cc_spaces_v86")||"null")}catch(_){}
+  let list=Array.isArray(saved)?saved:[];
+  // Repair any malformed/string-only saved values.
+  list=list.map(x=>typeof x==="string"?{name:x,area:"inside"}:x).filter(x=>x&&x.name&&["inside","outside"].includes(x.area));
+  defaultSpaces.forEach(d=>{if(!list.some(x=>x.name.toLowerCase()===d.name.toLowerCase()))list.push({...d})});
+  localStorage.setItem("cc_spaces_v86",JSON.stringify(list));return list;
+}
+let spaces=loadSpaces();
 let manualFocus=localStorage.getItem("cc_room_focus_v72")||"";
 function taskRepeat(c){const m=(c.description||"").match(/\[CC_REPEAT:([^\]]+)\]/);return m?m[1]:(c.recurring?"weekly":"none")}
 function taskRoom(c){const m=(c.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
@@ -642,8 +650,11 @@ function renderRooms(){
   spaces.forEach(s=>(s.area==="outside"?outside:inside).append(roomCard(s,focus)));
   renderRoomSuggestions();
 }
-document.getElementById("choreArea").addEventListener("change",renderRoomSuggestions);
+document.getElementById("choreArea").addEventListener("change",()=>{
+  fillRoomSelect(document.getElementById("choreRoom"),document.getElementById("choreArea").value);
+});
 document.getElementById("editChoreArea").addEventListener("change",()=>fillRoomSelect(document.getElementById("editChoreRoom"),document.getElementById("editChoreArea").value));
+renderRoomSuggestions();
 document.getElementById("addRoomBtn").addEventListener("click",()=>{
   const i=document.getElementById("newRoomName"),area=document.getElementById("newRoomArea").value,name=i.value.trim();if(!name)return;
   if(!spaces.some(s=>s.name.toLowerCase()===name.toLowerCase()))spaces.push({name,area});
@@ -706,8 +717,9 @@ choreForm.addEventListener("submit",async e=>{
   try{
     const data=await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=representation","Accept":"application/json"},body:JSON.stringify({user_id:currentUser.id,title,description:taskDescription(room,repeat,area),due_date:due,completed:false,recurring:repeat!=="none"})});
     if(Array.isArray(data)&&data[0])chores.push(data[0]);
-    choreForm.reset();choreDue.value=localDate;document.getElementById("choreRepeat").value="weekly";renderChores();toast("Chore added!")
-  }catch(err){console.error(err);toast("Couldn't save that chore.")}
+    choreForm.reset();document.getElementById("choreArea").value="inside";fillRoomSelect(document.getElementById("choreRoom"),"inside");
+    choreDue.value=localDate;document.getElementById("choreRepeat").value="weekly";renderChores();toast("Chore added!")
+  }catch(err){console.error(err);toast("Couldn\'t save chore: "+(err.message||"unknown error"))}
 });
 document.querySelectorAll("[data-chore-filter]").forEach(b=>b.addEventListener("click",()=>{choreFilter=b.dataset.choreFilter;document.querySelectorAll("[data-chore-filter]").forEach(x=>x.classList.toggle("active",x===b));renderChores()}));
 document.querySelectorAll("[data-hk-tab]").forEach(b=>b.addEventListener("click",()=>{
@@ -765,6 +777,7 @@ function renderLiveDashboard(){
     document.getElementById("dashGoalCount").textContent=active.length;
     const msg=document.getElementById("dashboardMessage");
     msg.textContent=!due.length?"Nothing due today. The goblin approves. ✦":due.length===1?"One chore needs your attention today. The rest can wait.":due.length+" chores are due. Pick what matters; perfection is not invited.";
+    renderDashboardChores();
     const focus=rotationFocus(),focusLine=document.getElementById("dashboardFocusLine"),focusCopy=document.getElementById("dashboardRoomCopy");
     focusLine.textContent=focus?"This week's focus: "+focus+" ✦":"No indoor focus room yet.";
     const focusDue=focus?due.filter(c=>taskRoom(c).toLowerCase()===focus.toLowerCase()).length:0;
