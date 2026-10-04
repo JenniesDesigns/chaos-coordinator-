@@ -201,8 +201,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div id="ccDiagnostic" style="margin-top:10px;padding:10px;border:1px dashed #ff4fa3;border-radius:10px;font-size:11px;white-space:pre-wrap;color:#ffd6ea">Diagnostic: page loaded. Waiting for JavaScript…</div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · DIAGNOSTIC BUILD</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.4 · Runtime fix</div>
   </div>
 </div>
 
@@ -378,15 +377,6 @@ input,select,textarea,button{max-width:100%}
 </div>
 
 <script>
-(function(){
-  const box=document.getElementById("ccDiagnostic");
-  function show(msg){if(box)box.textContent=msg;}
-  window.addEventListener("error",function(e){show("JavaScript error:\n"+(e.message||"Unknown error")+"\nLine "+(e.lineno||"?")+":"+(e.colno||"?"));});
-  window.addEventListener("unhandledrejection",function(e){const r=e.reason;show("Promise error:\n"+(r&&r.message?r.message:String(r)));});
-  window.__ccDiag=show;show("Diagnostic: JavaScript error catcher armed.");
-})();
-</script>
-<script>
 const SUPABASE_URL = "https://yuwlxolcknozudlhtvfr.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_85J_B7ktksZwn5EZsGswsQ_PWjvSb8R";
 const SESSION_KEY = "chaos_coordinator_session_v5";
@@ -444,7 +434,13 @@ document.querySelectorAll("[data-mobile-go]").forEach(b=>b.addEventListener("cli
 
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',2400)}
 document.getElementById('helpBtn').addEventListener('click',()=>toast('This is your first working prototype. More features are coming!'));
-function updateCount(){const checks=[...document.querySelectorAll('.focuscheck')];const done=checks.filter(c=>c.checked).length;document.getElementById('taskCount').textContent=`${done} of ${checks.length} done`;checks.forEach(c=>c.closest('.task').classList.toggle('done',c.checked))}
+function updateCount(){
+  const checks=[...document.querySelectorAll('.focuscheck')];
+  const done=checks.filter(c=>c.checked).length;
+  const taskCount=document.getElementById('taskCount');
+  if(taskCount) taskCount.textContent=`${done} of ${checks.length} done`;
+  checks.forEach(c=>{const task=c.closest('.task');if(task)task.classList.toggle('done',c.checked)});
+}
 document.querySelectorAll('.focuscheck').forEach(c=>c.addEventListener('change',updateCount));updateCount();
 
 
@@ -833,10 +829,8 @@ authForm.addEventListener("submit",e=>{e.preventDefault();doSignIn();});
 createSubmit.addEventListener("click",e=>{e.preventDefault();doCreateAccount();});
 
 async function startApp(user){
-  if(window.__ccDiag) window.__ccDiag("Diagnostic: saved login found. Loading your data…");
   currentUser=user;
   userEmail.textContent=user.email||"Account";
-  if(window.__ccDiag) window.__ccDiag("Diagnostic: login restored successfully. Opening dashboard…");
   authGate.style.display="none";
   await Promise.all([loadEvents(),loadGoals(),loadChores()]); renderLiveDashboard();
 }
@@ -851,9 +845,7 @@ document.getElementById("mobileSignOutBtn").addEventListener("click",()=>{
   document.getElementById("signOutBtn").click();
 });
 
-if(window.__ccDiag) window.__ccDiag("Diagnostic: main JavaScript reached restore-session.");
 const restored=restoreSession();
-if(window.__ccDiag) window.__ccDiag(restored?.user ? "Diagnostic: saved login found. Starting app…" : "Diagnostic: no saved login was found.");
 if(restored?.user) startApp(restored.user);
 
 
