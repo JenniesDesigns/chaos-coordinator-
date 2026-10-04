@@ -158,6 +158,25 @@ input,select,textarea,button{max-width:100%}
 .today-chore:last-child{border-bottom:0}
 .today-chore span{min-width:0;overflow-wrap:anywhere}
 @media(max-width:650px){.room-grid{grid-template-columns:minmax(0,1fr)}.room-add{flex-direction:column}.cc-modal-card{padding:14px}}
+
+/* v8 live command center */
+.command-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+.command-stat{border:1px solid var(--line);background:#111827;border-radius:14px;padding:12px;min-width:0}
+.command-stat b{display:block;font-size:22px;color:var(--teal)}
+.command-stat small{color:var(--muted)}
+.live-list{display:grid;gap:8px}
+.live-item{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+.live-item:last-child{border-bottom:0}
+.live-date{flex:0 0 48px;text-align:center;border:1px solid var(--line);border-radius:10px;padding:6px 3px;font-size:10px;color:var(--muted)}
+.live-date b{display:block;color:var(--text);font-size:15px}
+.live-copy{min-width:0;overflow-wrap:anywhere}
+.live-copy strong{color:var(--text)}
+.live-copy small{display:block;color:var(--muted);margin-top:2px}
+.focus-room{font-size:20px;font-weight:900;color:var(--teal);margin:7px 0}
+.goal-progress{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.goal-progress:last-child{border-bottom:0}
+.goal-progress .dot{flex:0 0 auto}
+@media(max-width:650px){.command-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.command-stat{padding:9px}.command-stat b{font-size:18px}}
 </style>
 </head>
 <body>
@@ -187,7 +206,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v7.2.2 · Housekeeping magic</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8 · Live Dashboard</div>
   </div>
 </div>
 
@@ -209,40 +228,55 @@ input,select,textarea,button{max-width:100%}
 <main>
   <div class="topbar"><div><div class="eyebrow">Your life, all in one place</div><h1 id="pageTitle">Dashboard</h1></div><div class="top-actions"><button class="iconbtn" id="helpBtn" aria-label="Help">?</button><div class="profile"><div class="avatar">G</div><span id="userEmail">Gigi</span><span>⌄</span><button id="signOutBtn" type="button">Sign out</button></div></div></div>
   <section class="view active" id="home">
-    <div class="hero"><div class="eyebrow">A little order in the beautiful chaos</div><h2 style="margin:5px 0 0;font-size:24px">Hey, Gigi. You've got this. <span style="color:var(--pink)">♡</span></h2><p>Small steps count. Pick what matters today, and let the rest wait.</p><div class="scribble">Progress, not perfection ✦</div></div>
-    <div class="grid">
-      <div class="card"><h2>Today's focus <span id="taskCount">0 of 3 done</span></h2>
-        <div class="task"><input type="checkbox" class="focuscheck"><label>Reset the kitchen<small>Housekeeping · 15 min</small></label></div>
-        <div class="task"><input type="checkbox" class="focuscheck"><label>Check this week's bills<small>Finances · 10 min</small></label></div>
-        <div class="task"><input type="checkbox" class="focuscheck"><label>Water the garden<small>Projects · 10 min</small></label></div>
-        <button class="linkbtn" data-go="housekeeping">View all tasks →</button>
-      </div>
-      <div class="card"><h2>Due today <span>Live from Housekeeping</span></h2>
-        <div id="dashboardChores" class="empty">Loading your chaos…</div>
-      </div>
-      <div class="card"><h2>Quick access <span>Jump right in</span></h2><div class="quickgrid">
+  <div class="hero">
+    <div class="eyebrow">YOUR CHAOS COMMAND CENTER</div>
+    <h2 style="margin:5px 0 0;font-size:24px">Hey, Gigi. Here's the chaos. <span style="color:var(--pink)">♡</span></h2>
+    <p id="dashboardMessage">Loading what matters today…</p>
+    <div class="command-summary">
+      <div class="command-stat"><b id="dashDueCount">0</b><small>chores due</small></div>
+      <div class="command-stat"><b id="dashEventCount">0</b><small>upcoming events</small></div>
+      <div class="command-stat"><b id="dashGoalCount">0</b><small>active goals</small></div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h2>Today's chores <span>Live</span></h2>
+      <div id="dashboardChores" class="empty">Loading your chaos…</div>
+      <button class="linkbtn" data-go="housekeeping">Open Housekeeping →</button>
+    </div>
+
+    <div class="card">
+      <h2>Room focus <span>This week's nudge</span></h2>
+      <div id="dashboardRoomFocus" class="focus-room">—</div>
+      <p id="dashboardRoomCopy" class="muted">One area at a time. No whole-house guilt spiral required.</p>
+      <button class="linkbtn" data-go="housekeeping">View rotation →</button>
+    </div>
+
+    <div class="card">
+      <h2>Coming up <span>Calendar</span></h2>
+      <div id="dashboardEvents" class="empty">No upcoming events.</div>
+      <button class="linkbtn" data-go="calendar">Open Calendar →</button>
+    </div>
+
+    <div class="card">
+      <h2>Goals in motion <span>Keep going</span></h2>
+      <div id="dashboardGoals" class="empty">No active goals yet.</div>
+      <button class="linkbtn" data-go="goals">Open Goals →</button>
+    </div>
+
+    <div class="card wide">
+      <h2>Quick access <span>Jump right in</span></h2>
+      <div class="quickgrid">
         <button class="quick" data-go="housekeeping"><b>🧹</b><small>Chores</small></button>
+        <button class="quick" data-go="calendar"><b>📅</b><small>Calendar</small></button>
+        <button class="quick" data-go="goals"><b>🎯</b><small>Goals</small></button>
         <button class="quick" data-go="projects"><b>⚒</b><small>Projects</small></button>
         <button class="quick" data-go="groceries"><b>🛒</b><small>Groceries</small></button>
-        <button class="quick" data-go="finances"><b>＄</b><small>Bills</small></button>
-      </div></div>
-      <div class="card"><h2>Upcoming bills <span><button class="linkbtn" data-go="finances">View all →</button></span></h2>
-        <div class="bill"><div>Electric<small>Due Oct 5</small></div><div class="amount">$118.00<div class="pill">Upcoming</div></div></div>
-        <div class="bill"><div>Internet<small>Due Oct 8</small></div><div class="amount">$76.00<div class="pill">Upcoming</div></div></div>
-        <div class="bill"><div>Phone<small>Due Oct 12</small></div><div class="amount">$65.00<div class="pill teal">Scheduled</div></div></div>
-      </div>
-      <div class="card wide"><h2>At a glance <span>This is a sample dashboard</span></h2>
-        <div class="statrow"><span>Housekeeping this week</span><strong>2 / 7</strong></div><div class="bar"><i style="width:29%"></i></div>
-        <div class="statrow"><span>Projects in progress</span><strong>2 active</strong></div><div class="bar"><i style="width:45%"></i></div>
-        <div class="statrow"><span>Grocery list</span><strong>5 items</strong></div><div class="bar"><i style="width:60%"></i></div>
-      </div>
-      <div class="card"><h2>Coming up <span>Next few days</span></h2>
-        <div class="activity"><span class="dot"></span><span><strong style="color:var(--text)">Today</strong><br>Choose your priorities</span></div>
-        <div class="activity"><span class="dot" style="background:var(--pink)"></span><span><strong style="color:var(--text)">Saturday</strong><br>Grocery planning</span></div>
-        <div class="activity"><span class="dot" style="background:var(--purple)"></span><span><strong style="color:var(--text)">Monday</strong><br>Review upcoming bills</span></div>
+        <button class="quick" data-go="finances"><b>＄</b><small>Finances</small></button>
       </div>
     </div>
-  </section>
+  </div>
+</section>
   <section class="view" id="housekeeping">
   <div class="hero">
     <div class="eyebrow">HOUSEKEEPING WITHOUT THE GUILT TRIP</div>
@@ -469,6 +503,8 @@ function renderEvents(){
     });
     row.append(main,del);list.append(row);
   });
+
+  if(typeof renderDashboard==='function') renderDashboard();
 }
 
 async function loadEvents(){
@@ -515,6 +551,8 @@ function renderGoals(){
     });
     row.append(check,main,del);list.append(row);
   });
+
+  if(typeof renderDashboard==='function') renderDashboard();
 }
 
 async function loadGoals(){
@@ -571,6 +609,75 @@ goalForm.addEventListener("submit",async e=>{
 });
 
 
+
+// ---- Live dashboard (v8) ----
+function dashboardEventDate(e){return e.event_date||""}
+function dashboardEventTime(e){return e.event_time||""}
+function shortMonthDay(date){
+  if(!date)return "—";
+  const d=new Date(date+"T12:00:00");
+  return {mon:d.toLocaleDateString(undefined,{month:"short"}),day:d.getDate()};
+}
+function renderDashboard(){
+  const due=chores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate));
+  const futureEvents=events.filter(e=>dashboardEventDate(e)>=localDate).sort((a,b)=>(dashboardEventDate(a)+dashboardEventTime(a)).localeCompare(dashboardEventDate(b)+dashboardEventTime(b)));
+  const activeGoals=goals.filter(g=>!g.completed);
+
+  const dc=document.getElementById("dashDueCount"),ec=document.getElementById("dashEventCount"),gc=document.getElementById("dashGoalCount");
+  if(dc)dc.textContent=due.length;if(ec)ec.textContent=futureEvents.length;if(gc)gc.textContent=activeGoals.length;
+
+  const msg=document.getElementById("dashboardMessage");
+  if(msg){
+    if(!due.length) msg.textContent="Nothing due today. The goblin approves. ✦";
+    else if(due.length===1) msg.textContent="One chore needs your attention today. The rest can wait.";
+    else msg.textContent=due.length+" chores are due. Pick what matters; perfection is not invited.";
+  }
+
+  const focus=document.getElementById("dashboardRoomFocus");
+  const copy=document.getElementById("dashboardRoomCopy");
+  if(focus){
+    const r=rotationFocus();focus.textContent=r||"No focus room";
+    if(copy&&r){const n=chores.filter(c=>taskRoom(c).toLowerCase()===r.toLowerCase()).length;copy.textContent=n?n+" chore"+(n===1?"":"s")+" linked to this area. One room at a time.":"No chores linked here yet. Add some whenever you're ready."}
+  }
+
+  const ev=document.getElementById("dashboardEvents");
+  if(ev){
+    ev.innerHTML="";
+    const show=futureEvents.slice(0,4);
+    if(!show.length){ev.className="empty";ev.textContent="Nothing on the horizon. Suspiciously peaceful. ✦"}
+    else{
+      ev.className="live-list";
+      show.forEach(e=>{
+        const md=shortMonthDay(dashboardEventDate(e));
+        const row=document.createElement("div");row.className="live-item";
+        const date=document.createElement("div");date.className="live-date";date.innerHTML="<span>"+md.mon+"</span><b>"+md.day+"</b>";
+        const cp=document.createElement("div");cp.className="live-copy";
+        const strong=document.createElement("strong");strong.textContent=e.title;
+        const small=document.createElement("small");small.textContent=dashboardEventTime(e)?dashboardEventTime(e).slice(0,5):"All day";
+        cp.append(strong,small);row.append(date,cp);ev.append(row);
+      })
+    }
+  }
+
+  const gl=document.getElementById("dashboardGoals");
+  if(gl){
+    gl.innerHTML="";
+    const show=activeGoals.slice(0,4);
+    if(!show.length){gl.className="empty";gl.textContent="No active goals. Dream up some trouble. ✦"}
+    else{
+      gl.className="live-list";
+      show.forEach(g=>{
+        const row=document.createElement("div");row.className="goal-progress";
+        const dot=document.createElement("span");dot.className="dot";
+        const cp=document.createElement("div");cp.className="live-copy";
+        const strong=document.createElement("strong");strong.textContent=g.title;
+        cp.append(strong);
+        if(g.description){const sm=document.createElement("small");sm.textContent=g.description;cp.append(sm)}
+        row.append(dot,cp);gl.append(row);
+      })
+    }
+  }
+}
 // ---- Housekeeping / recurring chores + rooms (v7.2) ----
 let chores=[];
 let choreFilter="all";
@@ -676,7 +783,7 @@ function renderChores(){
   if(choreFilter==="due")all=due; else if(choreFilter==="done")all=all.filter(c=>c.completed);
   all.sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
   renderList(document.getElementById("allChoreList"),all,"Nothing here yet.");
-  renderRooms();renderDashboardChores();
+  renderRooms();renderDashboardChores();renderDashboard();
 }
 async function loadChores(){
   try{const data=await supabaseRequest("/rest/v1/tasks?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});chores=Array.isArray(data)?data:[];renderChores()}
@@ -802,7 +909,7 @@ async function startApp(user){
   currentUser=user;
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
-  await Promise.all([loadEvents(),loadGoals(),loadChores()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores()]); renderDashboard();
 }
 
 document.getElementById("signOutBtn").addEventListener("click",()=>{
