@@ -100,6 +100,43 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
   .more-grid button span{display:block;color:var(--muted);font-size:10px;font-weight:500;margin-top:2px}
   .more-grid .danger{color:#ff9cdb}
 }
+
+/* v7 mobile-fit + housekeeping */
+html,body{max-width:100%;overflow-x:hidden}
+img,svg,canvas{max-width:100%}
+main,.app,.card,.hero,.topbar,.profile,.entry,.field{min-width:0}
+input,select,textarea,button{max-width:100%}
+@media(max-width:650px){
+  body{width:100%;overflow-x:hidden}
+  main{width:100%;max-width:100vw;padding-left:12px;padding-right:12px}
+  .topbar{gap:10px;max-width:100%}
+  .top-actions{min-width:0}
+  .profile{min-width:0;max-width:48vw}
+  .profile span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card,.hero{width:100%;max-width:100%;overflow:hidden}
+  .formgrid{display:grid;grid-template-columns:minmax(0,1fr)}
+  .formgrid .primary{grid-column:auto}
+  .field input,.field select,.field textarea{width:100%;min-width:0}
+  .quickgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .entry{min-width:0}
+  .entry-main{min-width:0;overflow-wrap:anywhere}
+}
+.chore-form{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end}
+.chore-list{display:grid;gap:8px}
+.chore-row{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:11px;background:#111827}
+.chore-row.done{opacity:.62}
+.chore-row.done .chore-title{text-decoration:line-through}
+.chore-check{accent-color:var(--teal);width:19px;height:19px;margin-top:2px;flex:0 0 auto}
+.chore-main{min-width:0;flex:1}
+.chore-title{font-weight:800;overflow-wrap:anywhere}
+.chore-meta{font-size:11px;color:var(--muted);margin-top:3px}
+.chore-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.chore-actions button{border:1px solid var(--line);background:#192238;color:var(--muted);border-radius:8px;padding:5px 7px;font-size:10px}
+.chore-filter{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 14px}
+.chore-filter button{border:1px solid var(--line);background:#192238;color:var(--muted);border-radius:999px;padding:6px 10px;font-size:11px}
+.chore-filter button.active{color:var(--teal);border-color:#42e0d077}
+@media(max-width:900px){.chore-form{grid-template-columns:1fr 1fr}.chore-form .chore-title-field{grid-column:span 2}}
+@media(max-width:650px){.chore-form{grid-template-columns:minmax(0,1fr)}.chore-form .chore-title-field{grid-column:auto}.chore-row{align-items:flex-start}.chore-actions{max-width:80px}}
 </style>
 </head>
 <body>
@@ -129,7 +166,7 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v6.1 · Mobile More menu</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v7 · Housekeeping</div>
   </div>
 </div>
 
@@ -182,7 +219,43 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
       </div>
     </div>
   </section>
-  <section class="view" id="housekeeping"><div class="card placeholder"><div><div class="big">🧹</div><h2>Housekeeping</h2><p>Your chores, cleaning routines, and home maintenance will live here.</p><button class="linkbtn" onclick="toast('Housekeeping is ready for the next build step.')">Plan this section →</button></div></div></section>
+  <section class="view" id="housekeeping">
+  <div class="hero">
+    <div class="eyebrow">HOUSEKEEPING WITHOUT THE GUILT TRIP</div>
+    <h2>Keep the chaos moving.</h2>
+    <p>Create a chore once, choose how often it repeats, and Chaos Coordinator will bring it back when it's actually due.</p>
+  </div>
+  <div class="card">
+    <h2>Add a chore</h2>
+    <form id="choreForm" class="chore-form">
+      <label class="field chore-title-field">Chore<input id="choreTitle" required placeholder="e.g. Clean kitchen counters"></label>
+      <label class="field">Room<input id="choreRoom" placeholder="Kitchen"></label>
+      <label class="field">Repeat
+        <select id="choreRepeat">
+          <option value="none">One time</option>
+          <option value="daily">Daily</option>
+          <option value="weekly" selected>Weekly</option>
+          <option value="biweekly">Every 2 weeks</option>
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Every 3 months</option>
+          <option value="semiannual">Twice a year</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </label>
+      <label class="field">First due<input id="choreDue" type="date" required></label>
+      <button class="primary" type="submit">＋ Add chore</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Your chores <span id="choreCount">0 chores</span></h2>
+    <div class="chore-filter">
+      <button type="button" class="active" data-chore-filter="due">Due now</button>
+      <button type="button" data-chore-filter="all">All</button>
+      <button type="button" data-chore-filter="done">Completed</button>
+    </div>
+    <div id="choreList" class="empty">Nothing due. Enjoy the suspicious silence. ✦</div>
+  </div>
+</section>
   <section class="view" id="projects"><div class="card placeholder"><div><div class="big">⚒️</div><h2>Projects</h2><p>Keep ideas, materials, budgets, and progress together.</p><button class="linkbtn" onclick="toast('Projects is ready for the next build step.')">Plan this section →</button></div></div></section>
   <section class="view" id="groceries"><div class="card placeholder"><div><div class="big">🛒</div><h2>Food & Groceries</h2><p>Meal plans, pantry inventory, freezer inventory, and shopping lists.</p><button class="linkbtn" onclick="toast('Food & Groceries is ready for the next build step.')">Plan this section →</button></div></div></section>
   <section class="view" id="finances"><div class="card placeholder"><div><div class="big">💰</div><h2>Bills & Finances</h2><p>Track bills, monthly budgets, debt, and savings goals in one place.</p><button class="linkbtn" onclick="toast('Bills & Finances is ready for the next build step.')">Plan this section →</button></div></div></section>
@@ -440,6 +513,144 @@ goalForm.addEventListener("submit",async e=>{
   }
 });
 
+
+// ---- Housekeeping / recurring chores (v7) ----
+let chores=[];
+let choreFilter="due";
+const choreForm=document.getElementById("choreForm");
+const choreDue=document.getElementById("choreDue");
+choreDue.value=localDate;
+
+function addMonthsClamped(date, months){
+  const d=new Date(date+"T12:00:00");
+  const originalDay=d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth()+months);
+  const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  d.setDate(Math.min(originalDay,last));
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+}
+function nextDue(date,repeat){
+  const d=new Date(date+"T12:00:00");
+  if(repeat==="daily") d.setDate(d.getDate()+1);
+  else if(repeat==="weekly") d.setDate(d.getDate()+7);
+  else if(repeat==="biweekly") d.setDate(d.getDate()+14);
+  else if(repeat==="monthly") return addMonthsClamped(date,1);
+  else if(repeat==="quarterly") return addMonthsClamped(date,3);
+  else if(repeat==="semiannual") return addMonthsClamped(date,6);
+  else if(repeat==="yearly") return addMonthsClamped(date,12);
+  else return null;
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+}
+function recurrenceLabel(r){
+  return ({none:"One time",daily:"Daily",weekly:"Weekly",biweekly:"Every 2 weeks",monthly:"Monthly",quarterly:"Every 3 months",semiannual:"Twice a year",yearly:"Yearly"})[r]||r;
+}
+function taskRepeat(task){
+  if(!task.recurring) return "none";
+  const desc=task.description||"";
+  const m=desc.match(/\\[CC_REPEAT:([^\\]]+)\\]/);
+  return m?m[1]:"weekly";
+}
+function taskRoom(task){
+  const desc=task.description||"";
+  const m=desc.match(/\\[CC_ROOM:([^\\]]*)\\]/);
+  return m?m[1]:"";
+}
+function taskDescription(room,repeat){
+  return "[CC_ROOM:"+room+"] [CC_REPEAT:"+repeat+"]";
+}
+function renderChores(){
+  const list=document.getElementById("choreList");
+  const today=localDate;
+  let visible=chores.slice();
+  if(choreFilter==="due") visible=visible.filter(c=>!c.completed && (!c.due_date||c.due_date<=today));
+  if(choreFilter==="done") visible=visible.filter(c=>c.completed);
+  visible.sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
+  document.getElementById("choreCount").textContent=chores.length+" chore"+(chores.length===1?"":"s");
+  list.innerHTML="";
+  if(!visible.length){
+    list.className="empty";
+    list.textContent=choreFilter==="due"?"Nothing due. Enjoy the suspicious silence. ✦":"Nothing here yet.";
+    return;
+  }
+  list.className="chore-list";
+  visible.forEach(c=>{
+    const repeat=taskRepeat(c),room=taskRoom(c);
+    const row=document.createElement("div"); row.className="chore-row"+(c.completed?" done":"");
+    const check=document.createElement("input"); check.type="checkbox"; check.className="chore-check"; check.checked=!!c.completed;
+    const main=document.createElement("div"); main.className="chore-main";
+    const title=document.createElement("div"); title.className="chore-title"; title.textContent=c.title;
+    const meta=document.createElement("div"); meta.className="chore-meta";
+    meta.textContent=(room?room+" · ":"")+(c.due_date?"Due "+prettyDate(c.due_date):"No due date")+" · "+recurrenceLabel(repeat);
+    main.append(title,meta);
+    const actions=document.createElement("div"); actions.className="chore-actions";
+    const del=document.createElement("button"); del.type="button"; del.textContent="Remove";
+    actions.append(del);
+    check.addEventListener("change",async()=>{
+      check.disabled=true;
+      try{
+        if(check.checked && repeat!=="none"){
+          const nd=nextDue(c.due_date||today,repeat);
+          await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{
+            method:"PATCH",headers:{"Prefer":"return=minimal"},
+            body:JSON.stringify({completed:false,due_date:nd})
+          });
+          c.completed=false;c.due_date=nd;
+          toast("Done! Next one scheduled for "+prettyDate(nd)+".");
+        }else{
+          await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{
+            method:"PATCH",headers:{"Prefer":"return=minimal"},
+            body:JSON.stringify({completed:check.checked})
+          });
+          c.completed=check.checked;
+          toast(check.checked?"Chore complete. Nice.":"Chore reopened.");
+        }
+        renderChores();
+      }catch(err){console.error(err);check.checked=!check.checked;toast("Couldn't update that chore.");}
+      finally{check.disabled=false}
+    });
+    del.addEventListener("click",async()=>{
+      try{
+        await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"DELETE"});
+        chores=chores.filter(x=>x.id!==c.id);renderChores();toast("Chore removed.");
+      }catch(err){console.error(err);toast("Couldn't remove that chore.");}
+    });
+    row.append(check,main,actions);list.append(row);
+  });
+}
+async function loadChores(){
+  try{
+    const data=await supabaseRequest("/rest/v1/tasks?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});
+    chores=Array.isArray(data)?data:[];
+    renderChores();
+  }catch(err){console.error(err);toast("Couldn't load your chores.");}
+}
+choreForm.addEventListener("submit",async e=>{
+  e.preventDefault();
+  if(!currentUser){toast("Please sign in first.");return}
+  const title=document.getElementById("choreTitle").value.trim();
+  const room=document.getElementById("choreRoom").value.trim();
+  const repeat=document.getElementById("choreRepeat").value;
+  const due=document.getElementById("choreDue").value;
+  try{
+    const data=await supabaseRequest("/rest/v1/tasks",{
+      method:"POST",headers:{"Prefer":"return=representation","Accept":"application/json"},
+      body:JSON.stringify({
+        user_id:currentUser.id,title,description:taskDescription(room,repeat),
+        due_date:due,completed:false,recurring:repeat!=="none"
+      })
+    });
+    if(Array.isArray(data)&&data[0]) chores.push(data[0]);
+    choreForm.reset();choreDue.value=localDate;document.getElementById("choreRepeat").value="weekly";
+    renderChores();toast("Chore added!");
+  }catch(err){console.error(err);toast("Couldn't save that chore.");}
+});
+document.querySelectorAll("[data-chore-filter]").forEach(b=>b.addEventListener("click",()=>{
+  choreFilter=b.dataset.choreFilter;
+  document.querySelectorAll("[data-chore-filter]").forEach(x=>x.classList.toggle("active",x===b));
+  renderChores();
+}));
+
 const authGate=document.getElementById("authGate");
 const authForm=document.getElementById("authForm");
 const authSubmit=document.getElementById("authSubmit");
@@ -508,12 +719,12 @@ async function startApp(user){
   currentUser=user;
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
-  await Promise.all([loadEvents(),loadGoals()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores()]);
 }
 
 document.getElementById("signOutBtn").addEventListener("click",()=>{
   clearSession();
-  currentUser=null; events=[]; goals=[]; renderEvents(); renderGoals();
+  currentUser=null; events=[]; goals=[]; chores=[]; renderEvents(); renderGoals(); renderChores();
   authForm.reset(); setAuthMessage(""); authGate.style.display="grid";
 });
 document.getElementById("mobileSignOutBtn").addEventListener("click",()=>{
