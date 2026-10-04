@@ -261,7 +261,23 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator{
   .formgrid .picker-wrap>input{width:100%}
 }
 </style>
-</head>
+<style>
+.meal-plan-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.meal-week-nav{display:flex;gap:6px}
+.meal-plan-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:14px}
+.meal-day{border:1px solid var(--line);border-radius:12px;padding:10px;min-width:0;background:rgba(255,255,255,.025)}
+.meal-day.today{outline:2px solid var(--teal)}
+.meal-day .meal-date{display:block;font-size:.72rem;color:var(--muted);margin-bottom:8px}
+.meal-day strong{display:block;margin-bottom:3px}
+.meal-day input{width:100%;min-width:0;box-sizing:border-box;margin-top:6px}
+.meal-day .meal-actions{display:flex;gap:5px;margin-top:7px}
+.meal-day .meal-actions button{padding:6px 8px;font-size:.72rem;flex:1}
+.dashboard-meal{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line)}
+.dashboard-meal:last-child{border-bottom:0}.dashboard-meal.today{font-weight:800}
+.dashboard-meal b{width:42px;flex:0 0 42px}.dashboard-meal span{min-width:0}
+@media(max-width:900px){.meal-plan-grid{grid-template-columns:1fr}.meal-day{display:grid;grid-template-columns:90px 1fr auto;gap:8px;align-items:center}.meal-day .meal-date{margin:0}.meal-day input{margin:0}.meal-day .meal-actions{margin:0}.meal-day .meal-actions button{flex:none}}
+@media(max-width:520px){.meal-day{grid-template-columns:78px 1fr}.meal-day .meal-actions{grid-column:2}.meal-week-nav button{padding-left:9px;padding-right:9px}}
+</style></head>
 <body>
 
 <style>
@@ -293,7 +309,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator{
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.3.4 · Desktop Picker Layout Fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v14 · Weekly Meal Plan</div>
   </div>
 </div>
 
@@ -333,6 +349,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator{
       <button class="linkbtn" data-go="housekeeping">Open Housekeeping →</button>
     </div>
     <div class="card"><h2>Coming up <span>Calendar</span></h2><div id="dashboardEvents" class="empty">No upcoming events.</div><button class="linkbtn" data-go="calendar">Open Calendar →</button></div>
+    <div class="card"><h2>🍴 This week's menu <span>Meal plan</span></h2><div id="dashboardMeals" class="empty">No meals planned yet. Wing it. ✦</div><button class="linkbtn" data-go="groceries">Open Meal Plan →</button></div>
     <div class="card"><h2>Goals in motion <span>Keep going</span></h2><div id="dashboardGoals" class="empty">No active goals yet.</div><button class="linkbtn" data-go="goals">Open Goals →</button></div>
     <div class="card wide"><h2>Quick access <span>Jump right in</span></h2><div class="quickgrid">
       <button class="quick" data-go="housekeeping"><b>🧹</b><small>Chores</small></button><button class="quick" data-go="calendar"><b>📅</b><small>Calendar</small></button>
@@ -455,6 +472,15 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator{
       <button id="openFoodMaster" type="button">📚 Browse Master Food List</button>
       <p style="margin:8px 0 0;color:var(--muted);font-size:12px">Pick common foods instead of typing everything one item at a time.</p>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="meal-plan-head">
+      <div><div class="eyebrow">WEEKLY MEAL PLAN</div><h2 id="mealWeekLabel" style="margin:4px 0 0">This week</h2></div>
+      <div class="meal-week-nav"><button id="mealPrevWeek" type="button">‹</button><button id="mealThisWeek" type="button">This week</button><button id="mealNextWeek" type="button">›</button></div>
+    </div>
+    <p class="muted" style="margin-top:8px">Plan dinner. Leave a day blank. Order pizza. No meal-planning police live here.</p>
+    <div id="mealPlanGrid" class="meal-plan-grid"></div>
   </div>
 
   <div class="card">
@@ -1440,6 +1466,56 @@ document.getElementById("addSelectedMasterFoods").addEventListener("click",async
   finally{btn.disabled=false}
 });
 
+
+// ---- Weekly Meal Plan (v14) ----
+let mealPlans=[],mealWeekOffset=0;
+function mealLocalISO(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`}
+function mealWeekStart(offset=0){
+  const d=new Date();d.setHours(12,0,0,0);const day=d.getDay();d.setDate(d.getDate()-((day+6)%7)+(offset*7));return d
+}
+function mealWeekDates(offset=mealWeekOffset){const start=mealWeekStart(offset);return Array.from({length:7},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);return d})}
+function mealForDate(iso){return mealPlans.find(m=>m.meal_date===iso)}
+function renderMealPlan(){
+  const dates=mealWeekDates(),start=dates[0],end=dates[6],grid=document.getElementById("mealPlanGrid");
+  if(!grid)return;
+  document.getElementById("mealWeekLabel").textContent=(mealWeekOffset===0?"This week · ":"")+start.toLocaleDateString(undefined,{month:"short",day:"numeric"})+" – "+end.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+  grid.innerHTML="";
+  dates.forEach(d=>{
+    const iso=mealLocalISO(d),existing=mealForDate(iso),card=document.createElement("div");card.className="meal-day"+(iso===localDate?" today":"");
+    const label=document.createElement("div");const strong=document.createElement("strong");strong.textContent=d.toLocaleDateString(undefined,{weekday:"short"});const sm=document.createElement("span");sm.className="meal-date";sm.textContent=d.toLocaleDateString(undefined,{month:"short",day:"numeric"});label.append(strong,sm);
+    const input=document.createElement("input");input.value=existing?.meal||"";input.placeholder="What's for dinner?";input.maxLength=160;
+    const actions=document.createElement("div");actions.className="meal-actions";
+    const save=document.createElement("button");save.type="button";save.textContent="Save";save.addEventListener("click",()=>saveMeal(iso,input.value));
+    actions.append(save);
+    if(existing){const clear=document.createElement("button");clear.type="button";clear.textContent="Clear";clear.addEventListener("click",()=>deleteMeal(existing));actions.append(clear)}
+    card.append(label,input,actions);grid.append(card);
+  });
+}
+async function loadMealPlans(){
+  try{const data=await supabaseRequest("/rest/v1/meal_plans?select=*&order=meal_date.asc",{headers:{"Accept":"application/json"}});mealPlans=Array.isArray(data)?data:[];renderMealPlan();renderDashboardMeals()}
+  catch(err){console.error("Meal plans failed to load",err);mealPlans=[];renderMealPlan();renderDashboardMeals()}
+}
+async function saveMeal(date,value){
+  const meal=value.trim();if(!meal){const old=mealForDate(date);if(old)return deleteMeal(old);toast("Type a meal first—or leave it gloriously blank. ✦");return}
+  const old=mealForDate(date),payload={user_id:currentUser.id,meal_date:date,meal,updated_at:new Date().toISOString()};
+  try{
+    if(old)await supabaseRequest("/rest/v1/meal_plans?id=eq."+encodeURIComponent(old.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});
+    else await supabaseRequest("/rest/v1/meal_plans",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});
+    await loadMealPlans();toast("Dinner coordinated-ish. ✦")
+  }catch(err){console.error(err);toast("Couldn't save that meal.")}
+}
+async function deleteMeal(m){
+  try{await supabaseRequest("/rest/v1/meal_plans?id=eq."+encodeURIComponent(m.id),{method:"DELETE"});await loadMealPlans();toast("Meal cleared. Wing it. ✦")}
+  catch(err){console.error(err);toast("Couldn't clear that meal.")}
+}
+function renderDashboardMeals(){
+  const box=document.getElementById("dashboardMeals");if(!box)return;const dates=mealWeekDates(0);box.innerHTML="";box.className="";
+  dates.forEach(d=>{const iso=mealLocalISO(d),m=mealForDate(iso),row=document.createElement("div");row.className="dashboard-meal"+(iso===localDate?" today":"");const day=document.createElement("b");day.textContent=(iso===localDate?"★ ":"")+d.toLocaleDateString(undefined,{weekday:"short"});const meal=document.createElement("span");meal.textContent=m?.meal||"Wing it. ✦";row.append(day,meal);box.append(row)});
+}
+document.getElementById("mealPrevWeek").addEventListener("click",()=>{mealWeekOffset--;renderMealPlan()});
+document.getElementById("mealNextWeek").addEventListener("click",()=>{mealWeekOffset++;renderMealPlan()});
+document.getElementById("mealThisWeek").addEventListener("click",()=>{mealWeekOffset=0;renderMealPlan()});
+
 // ---- Food & Groceries (v12) ----
 let foodItems=[],foodTab="grocery";
 function foodStatusLabel(s){return ({have:"Have it",low:"Running low",out:"Need to buy"})[s]||"Have it"}
@@ -1912,6 +1988,7 @@ setInterval(()=>{if(currentUser)refreshSession()},45*60*1000);
 // ---- Live dashboard (v8.3, isolated from startup) ----
 function renderLiveDashboard(){
   try{
+    renderDashboardMeals();
     const due=chores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate));
     const dashToday=new Date();dashToday.setHours(0,0,0,0);const dashThrough=new Date(dashToday);dashThrough.setDate(dashThrough.getDate()+30);dashThrough.setHours(23,59,59,999);
     const future=events.filter(e=>{const d=eventDateObj(e.event_date);return d&&d>=dashToday&&d<=dashThrough}).sort((a,b)=>((a.event_date||"")+(a.event_time||"")).localeCompare((b.event_date||"")+(b.event_time||"")));
@@ -2001,7 +2078,7 @@ async function startApp(user){
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
@@ -2009,7 +2086,7 @@ async function startApp(user){
 
 document.getElementById("signOutBtn").addEventListener("click",()=>{
   clearSession();
-  currentUser=null; events=[]; goals=[]; chores=[]; renderEvents(); renderGoals(); renderChores();
+  currentUser=null; events=[]; goals=[]; chores=[]; mealPlans=[]; renderEvents(); renderGoals(); renderChores();
   authForm.reset(); setAuthMessage(""); authGate.style.display="grid";
 });
 document.getElementById("mobileSignOutBtn").addEventListener("click",()=>{
@@ -2024,7 +2101,7 @@ async function refreshCloudView(){
   if(now-ccLastCloudRefresh<5000)return;
   ccLastCloudRefresh=now;
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings()]);
   await loadHousekeepingSettings();
   renderLiveDashboard();
 }
