@@ -205,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.1.1 · Mobile Date Fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.2 · Payday View</div>
   </div>
 </div>
 
@@ -385,6 +385,52 @@ input,select,textarea,button{max-width:100%}
     <div class="eyebrow">COORDINATED-ISH™ FINANCES</div>
     <h2>Know what's due. Pay it. Move on.</h2>
     <p>A simple view of your bills without turning your life into an accounting department.</p>
+  </div>
+
+  <div class="card" id="paydayCard" style="margin-bottom:16px">
+    <h2>💰 Payday View <span>What this paycheck needs to handle</span></h2>
+
+    <div id="paydaySetup">
+      <p style="margin-top:0">Set this up once and Chaos Coordinator will figure out which bills land before your next paycheck.</p>
+      <form id="paydayForm" class="formgrid">
+        <label class="field">How often are you paid?
+          <select id="payFrequency">
+            <option value="weekly">Weekly</option>
+            <option value="biweekly" selected>Every 2 weeks</option>
+            <option value="twice_monthly">Twice a month</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </label>
+        <label class="field">Next payday
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="nextPayday" required type="date" style="flex:1">
+        <button id="nextPaydayPicker" type="button" aria-label="Open payday calendar" title="Open calendar">📅</button>
+      </div>
+    </label>
+        <label class="field">Usual take-home pay<input id="usualTakeHome" required type="number" min="0" step="0.01" placeholder="0.00"></label>
+        <label class="field" id="secondPayDayWrap" style="display:none">Second pay day of month
+          <input id="secondPayDay" type="number" min="1" max="31" placeholder="e.g. 30">
+        </label>
+        <button class="primary" type="submit">Save payday setup</button>
+      </form>
+    </div>
+
+    <div id="paydaySummary" style="display:none">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px">
+        <div>
+          <div class="eyebrow">THIS PAYCHECK</div>
+          <h3 id="paydayHeadline" style="margin:4px 0">Next payday</h3>
+          <small id="paydayFrequencyLabel"></small>
+        </div>
+        <button id="editPaydaySettings" type="button">Edit payday setup</button>
+      </div>
+      <div class="stats" style="margin-bottom:14px">
+        <div class="stat"><span>Take-home</span><strong id="paydayIncome">$0.00</strong></div>
+        <div class="stat"><span>Bills before payday</span><strong id="paydayBillsTotal">$0.00</strong></div>
+        <div class="stat"><span>After bills</span><strong id="paydayRemaining">$0.00</strong></div>
+      </div>
+      <div id="paydayBillList" class="empty">Nothing due before payday. The money goblin approves. ✦</div>
+    </div>
   </div>
 
   <div class="stats" style="margin-bottom:16px">
@@ -1302,7 +1348,7 @@ function renderBills(){
   let shown=bills.slice();if(billFilter==="upcoming")shown=shown.filter(b=>!b.paid);if(billFilter==="autopay")shown=shown.filter(b=>b.autopay);
   shown.sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
   const list=document.getElementById("billList");list.innerHTML="";
-  if(!shown.length){list.className="empty";list.textContent=billFilter==="upcoming"?"Nothing waiting to be paid. The money goblin approves. ✦":"No bills here. ✦";return}
+  if(!shown.length){list.className="empty";list.textContent=billFilter==="upcoming"?"Nothing waiting to be paid. The money goblin approves. ✦":"No bills here. ✦";if(typeof renderPayday==="function")renderPayday();return}
   list.className="";
   shown.forEach(b=>{
     const row=document.createElement("div");row.className="entry";
@@ -1315,6 +1361,7 @@ function renderBills(){
     const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openBillEdit(b));
     const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeBill(b));actions.append(edit,del);row.append(main,actions);list.append(row);
   });
+  if(typeof renderPayday==="function")renderPayday();
 }
 async function loadBills(){try{const data=await supabaseRequest("/rest/v1/bills?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});bills=Array.isArray(data)?data:[];renderBills()}catch(err){console.error(err);toast("Couldn't load bills.")}}
 document.getElementById("billForm").addEventListener("submit",async e=>{
@@ -1460,6 +1507,112 @@ document.getElementById("saveDateFallback").addEventListener("click",()=>{
 });
 document.getElementById("dateFallbackModal").addEventListener("click",e=>{if(e.target.id==="dateFallbackModal")closeDateFallback()});
 
+
+// ---- Payday View (v13.2) ----
+let paydaySettings=null;
+
+function payFrequencyLabel(f){
+  return ({weekly:"Paid weekly",biweekly:"Paid every 2 weeks",twice_monthly:"Paid twice a month",monthly:"Paid monthly"})[f]||"";
+}
+function paydayLocalDate(str){return str?new Date(str+"T12:00:00"):null}
+function isoLocal(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+day}
+function addMonthsClamped(date,months,preferredDay){
+  const y=date.getFullYear(),m=date.getMonth()+months,last=new Date(y,m+1,0).getDate(),day=Math.min(preferredDay||date.getDate(),last);
+  return new Date(y,m,day,12,0,0);
+}
+function nextPaydayAfter(date,settings){
+  const f=settings.pay_frequency;
+  if(f==="weekly"){const d=new Date(date);d.setDate(d.getDate()+7);return d}
+  if(f==="biweekly"){const d=new Date(date);d.setDate(d.getDate()+14);return d}
+  if(f==="monthly")return addMonthsClamped(date,1,date.getDate());
+  if(f==="twice_monthly"){
+    const firstDay=date.getDate(), second=Number(settings.second_pay_day)||Math.min(31,firstDay+15);
+    if(firstDay<second){const last=new Date(date.getFullYear(),date.getMonth()+1,0).getDate();return new Date(date.getFullYear(),date.getMonth(),Math.min(second,last),12,0,0)}
+    const nextMonth=new Date(date.getFullYear(),date.getMonth()+1,1,12,0,0),last=new Date(nextMonth.getFullYear(),nextMonth.getMonth()+1,0).getDate();
+    return new Date(nextMonth.getFullYear(),nextMonth.getMonth(),Math.min(firstDay,last),12,0,0);
+  }
+  return date;
+}
+function normalizePayday(settings){
+  let d=paydayLocalDate(settings.next_payday);if(!d)return null;
+  const today=new Date();today.setHours(0,0,0,0);
+  let guard=0;
+  while(d<today&&guard++<200)d=nextPaydayAfter(d,settings);
+  return d;
+}
+function paydayBillsThrough(date){
+  if(!date)return[];
+  const end=isoLocal(date),today=isoLocal(new Date());
+  return bills.filter(b=>!b.paid&&b.due_date&&b.due_date>=today&&b.due_date<=end).sort((a,b)=>a.due_date.localeCompare(b.due_date));
+}
+function toggleTwiceMonthly(){
+  document.getElementById("secondPayDayWrap").style.display=document.getElementById("payFrequency").value==="twice_monthly"?"":"none";
+}
+function fillPaydayForm(){
+  if(!paydaySettings)return;
+  document.getElementById("payFrequency").value=paydaySettings.pay_frequency||"biweekly";
+  document.getElementById("nextPayday").value=paydaySettings.next_payday||"";
+  document.getElementById("usualTakeHome").value=paydaySettings.usual_take_home??0;
+  document.getElementById("secondPayDay").value=paydaySettings.second_pay_day||"";
+  toggleTwiceMonthly();
+}
+function renderPayday(){
+  const setup=document.getElementById("paydaySetup"),summary=document.getElementById("paydaySummary");
+  if(!paydaySettings||!paydaySettings.next_payday){
+    setup.style.display="";summary.style.display="none";toggleTwiceMonthly();return;
+  }
+  const next=normalizePayday(paydaySettings);
+  if(!next){setup.style.display="";summary.style.display="none";return}
+  setup.style.display="none";summary.style.display="";
+  const items=paydayBillsThrough(next),total=items.reduce((s,b)=>s+Number(b.amount||0),0),income=Number(paydaySettings.usual_take_home||0),remaining=income-total;
+  document.getElementById("paydayHeadline").textContent="Next payday: "+prettyDate(isoLocal(next));
+  document.getElementById("paydayFrequencyLabel").textContent=payFrequencyLabel(paydaySettings.pay_frequency);
+  document.getElementById("paydayIncome").textContent=money(income);
+  document.getElementById("paydayBillsTotal").textContent=money(total);
+  document.getElementById("paydayRemaining").textContent=money(remaining);
+  const list=document.getElementById("paydayBillList");list.innerHTML="";
+  if(!items.length){list.className="empty";list.textContent="Nothing due before payday. The money goblin approves. ✦";return}
+  list.className="";
+  items.forEach(b=>{
+    const row=document.createElement("div");row.className="entry";
+    const main=document.createElement("div");main.className="entry-main";
+    const title=document.createElement("strong");title.textContent=b.name+" · "+money(b.amount);
+    const meta=document.createElement("small");meta.textContent="Due "+prettyDate(b.due_date)+(b.autopay?" · Autopay":"");
+    main.append(title,meta);
+    const actions=document.createElement("div");actions.className="chore-actions";
+    const paid=document.createElement("button");paid.type="button";paid.textContent="Paid ✓";paid.addEventListener("click",()=>payBill(b));
+    actions.append(paid);row.append(main,actions);list.append(row);
+  });
+}
+async function loadPaydaySettings(){
+  try{
+    const data=await supabaseRequest("/rest/v1/payday_settings?select=*&user_id=eq."+encodeURIComponent(currentUser.id),{headers:{"Accept":"application/json"}});
+    paydaySettings=Array.isArray(data)&&data.length?data[0]:null;fillPaydayForm();renderPayday();
+  }catch(err){console.error(err);toast("Couldn't load payday setup.")}
+}
+document.getElementById("payFrequency").addEventListener("change",toggleTwiceMonthly);
+document.getElementById("paydayForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const frequency=document.getElementById("payFrequency").value,next=document.getElementById("nextPayday").value,takeHome=Number(document.getElementById("usualTakeHome").value||0),secondRaw=document.getElementById("secondPayDay").value;
+  if(frequency==="twice_monthly"&&!secondRaw){toast("Add the second pay day of the month.");return}
+  const payload={user_id:currentUser.id,pay_frequency:frequency,next_payday:next,usual_take_home:takeHome,second_pay_day:frequency==="twice_monthly"?Number(secondRaw):null,updated_at:new Date().toISOString()};
+  try{
+    await supabaseRequest("/rest/v1/payday_settings?on_conflict=user_id",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(payload)});
+    paydaySettings=payload;renderPayday();toast("Payday setup saved. Money goblin has a plan. ✦");
+  }catch(err){console.error(err);toast("Couldn't save payday setup: "+(err.message||"unknown error"))}
+});
+document.getElementById("editPaydaySettings").addEventListener("click",()=>{fillPaydayForm();document.getElementById("paydaySummary").style.display="none";document.getElementById("paydaySetup").style.display=""});
+document.getElementById("nextPaydayPicker").addEventListener("click",()=>{
+  const input=document.getElementById("nextPayday");
+  try{if(typeof input.showPicker==="function"){input.showPicker();return}}catch(err){console.warn("Native payday picker unavailable",err)}
+  // Reuse our proven fallback date modal, then transfer the selected date.
+  const edit=document.getElementById("editBillDue"),old=edit.value;
+  edit.value=input.value||isoLocal(new Date());openDateFallback();
+  const save=document.getElementById("saveDateFallback");
+  const transfer=()=>{input.value=edit.value;edit.value=old;save.removeEventListener("click",transfer)};
+  save.addEventListener("click",transfer);
+});
+
 // ---- Session refresh (v7.2) ----
 async function refreshSession(){
   const saved=JSON.parse(localStorage.getItem("chaos_coordinator_session_v5")||"null");
@@ -1565,7 +1718,7 @@ async function startApp(user){
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills(),loadDebts(),loadSavings()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
@@ -1588,7 +1741,7 @@ async function refreshCloudView(){
   if(now-ccLastCloudRefresh<5000)return;
   ccLastCloudRefresh=now;
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills(),loadDebts(),loadSavings()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings()]);
   await loadHousekeepingSettings();
   renderLiveDashboard();
 }
