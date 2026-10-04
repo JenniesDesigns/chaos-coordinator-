@@ -185,6 +185,10 @@ input,select,textarea,button{max-width:100%}
 .auth-card button{width:100%;margin-top:8px}
 .auth-msg{min-height:22px;margin-top:12px;color:#42e0d0;font-size:13px}.auth-error{color:#ff9cdb}
 #signOutBtn{border:1px solid var(--line);background:#192238;color:var(--muted);border-radius:8px;padding:6px 9px;font-size:11px;margin-left:6px}
+
+/* v10.1: view isolation — keep section content on its own screen on mobile */
+.view:not(.active){display:none !important}
+.view.active{display:block}
 </style>
 <div id="authGate">
   <div class="auth-card">
@@ -201,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v10 · Projects</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v10.1 · Project View Fix</div>
   </div>
 </div>
 
