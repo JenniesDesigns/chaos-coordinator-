@@ -201,7 +201,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.5 · Synced Dashboard</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.6 · Inside + Outside</div>
   </div>
 </div>
 
@@ -259,7 +259,7 @@ input,select,textarea,button{max-width:100%}
   <div class="hk-tabs">
     <button type="button" class="active" data-hk-tab="today">Today</button>
     <button type="button" data-hk-tab="chores">My Chores</button>
-    <button type="button" data-hk-tab="rooms">Room Rotation</button>
+    <button type="button" data-hk-tab="rooms">Rooms & Spaces</button>
   </div>
 
   <div id="hkToday">
@@ -274,7 +274,8 @@ input,select,textarea,button{max-width:100%}
       <h2>Add a chore</h2>
       <form id="choreForm" class="chore-form">
         <label class="field chore-title-field">Chore<input id="choreTitle" required placeholder="e.g. Clean kitchen counters"></label>
-        <label class="field">Room<input id="choreRoom" list="roomSuggestions" placeholder="Kitchen"><datalist id="roomSuggestions"></datalist></label>
+        <label class="field">Area<select id="choreArea"><option value="inside">🏠 Inside</option><option value="outside">🌿 Outside</option></select></label>
+        <label class="field">Room / space<select id="choreRoom" required></select></label>
         <label class="field">Repeat
           <select id="choreRepeat">
             <option value="none">One time</option><option value="daily">Daily</option><option value="weekly" selected>Weekly</option>
@@ -299,12 +300,14 @@ input,select,textarea,button{max-width:100%}
 
   <div id="hkRooms" style="display:none">
     <div class="card">
-      <h2>Room Rotation</h2>
-      <p class="muted">One focus area at a time. The rotation advances weekly, but you can choose a different focus whenever real life says so.</p>
-      <div id="roomGrid" class="room-grid"></div>
+      <h2>Rooms & Spaces</h2>
+      <p class="muted">Indoor rooms rotate as your weekly focus. Outdoor spaces keep their own schedules and still appear whenever a chore is due.</p>
+      <h3>🏠 Inside</h3><div id="insideRoomGrid" class="room-grid"></div>
+      <h3 style="margin-top:18px">🌿 Outside</h3><div id="outsideRoomGrid" class="room-grid"></div>
       <div class="room-add">
-        <input id="newRoomName" placeholder="Add another room or area">
-        <button id="addRoomBtn" class="primary" type="button">＋ Add room</button>
+        <select id="newRoomArea"><option value="inside">🏠 Inside</option><option value="outside">🌿 Outside</option></select>
+        <input id="newRoomName" placeholder="Add room or outdoor space">
+        <button id="addRoomBtn" class="primary" type="button">＋ Add space</button>
       </div>
     </div>
   </div>
@@ -368,7 +371,8 @@ input,select,textarea,button{max-width:100%}
     <form id="choreEditForm">
       <input id="editChoreId" type="hidden">
       <label class="field">Chore<input id="editChoreTitle" required></label>
-      <label class="field">Room<input id="editChoreRoom" list="roomSuggestions"></label>
+      <label class="field">Area<select id="editChoreArea"><option value="inside">🏠 Inside</option><option value="outside">🌿 Outside</option></select></label>
+      <label class="field">Room / space<select id="editChoreRoom"></select></label>
       <label class="field">Repeat<select id="editChoreRepeat">
         <option value="none">One time</option><option value="daily">Daily</option><option value="weekly">Weekly</option>
         <option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option><option value="quarterly">Every 3 months</option>
@@ -586,62 +590,64 @@ goalForm.addEventListener("submit",async e=>{
 // ---- Housekeeping / recurring chores + rooms (v7.2) ----
 let chores=[];
 let choreFilter="all";
-const defaultRooms=["Laundry area","Guest room / workout room","Kitchen","Downstairs bathroom","Dining room","Living room","Living room closet","Hallway / stairs","Upstairs bathroom","Office","Bedroom"];
-let rooms=JSON.parse(localStorage.getItem("cc_rooms_v72")||"null")||defaultRooms.slice();
+const defaultSpaces=[
+  {name:"Laundry area",area:"inside"},{name:"Guest room / workout room",area:"inside"},{name:"Kitchen",area:"inside"},
+  {name:"Downstairs bathroom",area:"inside"},{name:"Dining room",area:"inside"},{name:"Living room",area:"inside"},
+  {name:"Living room closet",area:"inside"},{name:"Hallway / stairs",area:"inside"},{name:"Upstairs bathroom",area:"inside"},
+  {name:"Office",area:"inside"},{name:"Bedroom",area:"inside"},
+  {name:"Yard",area:"outside"},{name:"Garden",area:"outside"},{name:"Patio / deck",area:"outside"}
+];
+let spaces=JSON.parse(localStorage.getItem("cc_spaces_v86")||"null")||defaultSpaces.slice();
 let manualFocus=localStorage.getItem("cc_room_focus_v72")||"";
-const choreForm=document.getElementById("choreForm");
-const choreDue=document.getElementById("choreDue");
-choreDue.value=localDate;
-
-function addMonthsClamped(date,months){
-  const d=new Date(date+"T12:00:00"),day=d.getDate(); d.setDate(1); d.setMonth(d.getMonth()+months);
-  d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));
-  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+function taskRepeat(c){const m=(c.description||"").match(/\[CC_REPEAT:([^\]]+)\]/);return m?m[1]:(c.recurring?"weekly":"none")}
+function taskRoom(c){const m=(c.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
+function taskArea(c){
+  const m=(c.description||"").match(/\[CC_AREA:([^\]]+)\]/);if(m)return m[1];
+  const room=taskRoom(c);const s=spaces.find(x=>x.name.toLowerCase()===room.toLowerCase());return s?s.area:"inside";
 }
-function nextDue(date,repeat){
-  const d=new Date(date+"T12:00:00");
-  if(repeat==="daily")d.setDate(d.getDate()+1); else if(repeat==="weekly")d.setDate(d.getDate()+7);
-  else if(repeat==="biweekly")d.setDate(d.getDate()+14); else if(repeat==="monthly")return addMonthsClamped(date,1);
-  else if(repeat==="quarterly")return addMonthsClamped(date,3); else if(repeat==="semiannual")return addMonthsClamped(date,6);
-  else if(repeat==="yearly")return addMonthsClamped(date,12); else return null;
-  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
-}
-function recurrenceLabel(r){return({none:"One time",daily:"Daily",weekly:"Weekly",biweekly:"Every 2 weeks",monthly:"Monthly",quarterly:"Every 3 months",semiannual:"Twice a year",yearly:"Yearly"})[r]||r}
-function taskRepeat(task){const m=(task.description||"").match(/\[CC_REPEAT:([^\]]+)\]/);return m?m[1]:(task.recurring?"weekly":"none")}
-function taskRoom(task){const m=(task.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
-function taskDescription(room,repeat){return "[CC_ROOM:"+room+"] [CC_REPEAT:"+repeat+"]"}
-
+function taskDescription(room,repeat,area="inside"){return `[CC_ROOM:${room}] [CC_REPEAT:${repeat}] [CC_AREA:${area}]`}
+function insideRooms(){return spaces.filter(s=>s.area==="inside").map(s=>s.name)}
 function rotationFocus(){
+  const rooms=insideRooms();
   if(manualFocus&&rooms.includes(manualFocus))return manualFocus;
   if(!rooms.length)return "";
-  const epoch=new Date("2026-01-05T12:00:00");
-  const now=new Date(localDate+"T12:00:00");
-  const week=Math.floor((now-epoch)/(7*86400000));
-  return rooms[((week%rooms.length)+rooms.length)%rooms.length];
+  const epoch=new Date("2026-01-05T12:00:00"),now=new Date(localDate+"T12:00:00");
+  const week=Math.floor((now-epoch)/(7*86400000));return rooms[((week%rooms.length)+rooms.length)%rooms.length];
 }
-function saveRooms(){localStorage.setItem("cc_rooms_v72",JSON.stringify(rooms));renderRooms()}
+function saveSpaces(){localStorage.setItem("cc_spaces_v86",JSON.stringify(spaces));renderRooms()}
+function fillRoomSelect(select,area,value=""){
+  const names=spaces.filter(s=>s.area===area).map(s=>s.name);select.innerHTML="";
+  names.forEach(name=>{const o=document.createElement("option");o.value=name;o.textContent=name;select.append(o)});
+  if(value&&!names.includes(value)){const o=document.createElement("option");o.value=value;o.textContent=value;select.append(o)}
+  if(value)select.value=value;
+}
 function renderRoomSuggestions(){
-  const dl=document.getElementById("roomSuggestions");dl.innerHTML="";
-  rooms.forEach(r=>{const o=document.createElement("option");o.value=r;dl.append(o)})
+  fillRoomSelect(document.getElementById("choreRoom"),document.getElementById("choreArea").value);
+}
+function roomCard(s,focus){
+  const c=document.createElement("div");c.className="room-card"+(s.name===focus?" focus":"");
+  const h=document.createElement("h3");h.textContent=(s.name===focus?"✦ ":"")+s.name;
+  const linked=chores.filter(x=>taskRoom(x).toLowerCase()===s.name.toLowerCase());
+  const due=linked.filter(x=>!x.completed&&(!x.due_date||x.due_date<=localDate));
+  const p=document.createElement("p");p.textContent=linked.length+" chore"+(linked.length===1?"":"s")+" · "+due.length+" due";
+  c.append(h,p);
+  if(s.area==="inside"){const b=document.createElement("button");b.type="button";b.className="room-chip";b.textContent=s.name===focus?"Focused":"Make focus";b.addEventListener("click",()=>{manualFocus=s.name;localStorage.setItem("cc_room_focus_v72",s.name);renderRooms();renderLiveDashboard();toast(s.name+" is your focus room.")});c.append(b)}
+  const list=document.createElement("div");list.className="muted";list.style.marginTop="8px";
+  list.textContent=linked.length?linked.map(x=>x.title).join(" · "):"No chores assigned yet.";
+  c.append(list);return c;
 }
 function renderRooms(){
+  const focus=rotationFocus(),inside=document.getElementById("insideRoomGrid"),outside=document.getElementById("outsideRoomGrid");
+  inside.innerHTML="";outside.innerHTML="";
+  spaces.forEach(s=>(s.area==="outside"?outside:inside).append(roomCard(s,focus)));
   renderRoomSuggestions();
-  const grid=document.getElementById("roomGrid");grid.innerHTML="";
-  const focus=rotationFocus();
-  rooms.forEach(r=>{
-    const c=document.createElement("div");c.className="room-card"+(r===focus?" focus":"");
-    const h=document.createElement("h3");h.textContent=(r===focus?"✦ ":"")+r;
-    const count=chores.filter(x=>taskRoom(x).toLowerCase()===r.toLowerCase()).length;
-    const p=document.createElement("p");p.textContent=(r===focus?"Current focus · ":"")+count+" chore"+(count===1?"":"s");
-    const b=document.createElement("button");b.type="button";b.className="room-chip";b.textContent=r===focus?"Focused":"Make focus";
-    b.addEventListener("click",()=>{manualFocus=r;localStorage.setItem("cc_room_focus_v72",r);renderRooms();toast(r+" is your focus area.")});
-    c.append(h,p,b);grid.append(c)
-  })
 }
+document.getElementById("choreArea").addEventListener("change",renderRoomSuggestions);
+document.getElementById("editChoreArea").addEventListener("change",()=>fillRoomSelect(document.getElementById("editChoreRoom"),document.getElementById("editChoreArea").value));
 document.getElementById("addRoomBtn").addEventListener("click",()=>{
-  const i=document.getElementById("newRoomName"),name=i.value.trim();if(!name)return;
-  if(!rooms.some(r=>r.toLowerCase()===name.toLowerCase()))rooms.push(name);
-  i.value="";saveRooms();toast("Room added.")
+  const i=document.getElementById("newRoomName"),area=document.getElementById("newRoomArea").value,name=i.value.trim();if(!name)return;
+  if(!spaces.some(s=>s.name.toLowerCase()===name.toLowerCase()))spaces.push({name,area});
+  i.value="";saveSpaces();toast("Space added.")
 });
 
 function choreRow(c){
@@ -696,10 +702,10 @@ async function loadChores(){
 }
 choreForm.addEventListener("submit",async e=>{
   e.preventDefault();if(!currentUser){toast("Please sign in first.");return}
-  const title=document.getElementById("choreTitle").value.trim(),room=document.getElementById("choreRoom").value.trim(),repeat=document.getElementById("choreRepeat").value,due=document.getElementById("choreDue").value;
+  const title=document.getElementById("choreTitle").value.trim(),area=document.getElementById("choreArea").value,room=document.getElementById("choreRoom").value,repeat=document.getElementById("choreRepeat").value,due=document.getElementById("choreDue").value;
   try{
-    const data=await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=representation","Accept":"application/json"},body:JSON.stringify({user_id:currentUser.id,title,description:taskDescription(room,repeat),due_date:due,completed:false,recurring:repeat!=="none"})});
-    if(Array.isArray(data)&&data[0])chores.push(data[0]);if(room&&!rooms.some(r=>r.toLowerCase()===room.toLowerCase()))rooms.push(room),saveRooms();
+    const data=await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=representation","Accept":"application/json"},body:JSON.stringify({user_id:currentUser.id,title,description:taskDescription(room,repeat,area),due_date:due,completed:false,recurring:repeat!=="none"})});
+    if(Array.isArray(data)&&data[0])chores.push(data[0]);
     choreForm.reset();choreDue.value=localDate;document.getElementById("choreRepeat").value="weekly";renderChores();toast("Chore added!")
   }catch(err){console.error(err);toast("Couldn't save that chore.")}
 });
@@ -712,7 +718,8 @@ document.querySelectorAll("[data-hk-tab]").forEach(b=>b.addEventListener("click"
 const choreEditModal=document.getElementById("choreEditModal");
 function openChoreEdit(c){
   document.getElementById("editChoreId").value=c.id;document.getElementById("editChoreTitle").value=c.title;
-  document.getElementById("editChoreRoom").value=taskRoom(c);document.getElementById("editChoreRepeat").value=taskRepeat(c);
+  document.getElementById("editChoreArea").value=taskArea(c);
+  fillRoomSelect(document.getElementById("editChoreRoom"),taskArea(c),taskRoom(c));document.getElementById("editChoreRepeat").value=taskRepeat(c);
   document.getElementById("editChoreDue").value=c.due_date||localDate;choreEditModal.classList.add("open");choreEditModal.setAttribute("aria-hidden","false")
 }
 function closeChoreEdit(){choreEditModal.classList.remove("open");choreEditModal.setAttribute("aria-hidden","true")}
@@ -721,8 +728,8 @@ choreEditModal.addEventListener("click",e=>{if(e.target===choreEditModal)closeCh
 document.getElementById("choreEditForm").addEventListener("submit",async e=>{
   e.preventDefault();const id=document.getElementById("editChoreId").value,title=document.getElementById("editChoreTitle").value.trim(),room=document.getElementById("editChoreRoom").value.trim(),repeat=document.getElementById("editChoreRepeat").value,due=document.getElementById("editChoreDue").value;
   try{
-    await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description:taskDescription(room,repeat),due_date:due,recurring:repeat!=="none"})});
-    const c=chores.find(x=>x.id===id);if(c){c.title=title;c.description=taskDescription(room,repeat);c.due_date=due;c.recurring=repeat!=="none"}
+    await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description:taskDescription(room,repeat,area),due_date:due,recurring:repeat!=="none"})});
+    const c=chores.find(x=>x.id===id);if(c){c.title=title;c.description=taskDescription(room,repeat,area);c.due_date=due;c.recurring=repeat!=="none"}
     if(room&&!rooms.some(r=>r.toLowerCase()===room.toLowerCase()))rooms.push(room),saveRooms();closeChoreEdit();renderChores();toast("Chore updated.")
   }catch(err){console.error(err);toast("Couldn't save those changes.")}
 });
@@ -758,16 +765,10 @@ function renderLiveDashboard(){
     document.getElementById("dashGoalCount").textContent=active.length;
     const msg=document.getElementById("dashboardMessage");
     msg.textContent=!due.length?"Nothing due today. The goblin approves. ✦":due.length===1?"One chore needs your attention today. The rest can wait.":due.length+" chores are due. Pick what matters; perfection is not invited.";
-    const dueRooms=[...new Set(due.map(c=>taskRoom(c)).filter(Boolean))];
-    const focusLine=document.getElementById("dashboardFocusLine");
-    const focusCopy=document.getElementById("dashboardRoomCopy");
-    if(dueRooms.length){
-      focusLine.textContent="Focus: "+dueRooms.join(" + ");
-      focusCopy.textContent=due.length+" chore"+(due.length===1?"":"s")+" due across "+dueRooms.length+" room"+(dueRooms.length===1?"":"s")+".";
-    }else{
-      focusLine.textContent="No room needs you today. ✦";
-      focusCopy.textContent="Nothing due means nothing gets to manufacture guilt.";
-    }
+    const focus=rotationFocus(),focusLine=document.getElementById("dashboardFocusLine"),focusCopy=document.getElementById("dashboardRoomCopy");
+    focusLine.textContent=focus?"This week's focus: "+focus+" ✦":"No indoor focus room yet.";
+    const focusDue=focus?due.filter(c=>taskRoom(c).toLowerCase()===focus.toLowerCase()).length:0;
+    focusCopy.textContent=focus?(focusDue?focusDue+" due chore"+(focusDue===1?"":"s")+" in "+focus+".":"No "+focus+" chores are due today. Other due chores are still listed below."):"Add an indoor room when you're ready.";
     const ev=document.getElementById("dashboardEvents");ev.innerHTML="";
     if(!future.length){ev.className="empty";ev.textContent="Nothing on the horizon. Suspiciously peaceful. ✦"}else{ev.className="live-list";future.slice(0,4).forEach(e=>{const d=new Date(e.event_date+"T12:00:00"),row=document.createElement("div");row.className="live-item";const date=document.createElement("div");date.className="live-date";const mon=document.createElement("span");mon.textContent=d.toLocaleDateString(undefined,{month:"short"});const day=document.createElement("b");day.textContent=d.getDate();date.append(mon,day);const cp=document.createElement("div");cp.className="live-copy";const st=document.createElement("strong");st.textContent=e.title;const sm=document.createElement("small");sm.textContent=e.event_time?e.event_time.slice(0,5):"All day";cp.append(st,sm);row.append(date,cp);ev.append(row)})}
     const gl=document.getElementById("dashboardGoals");gl.innerHTML="";
