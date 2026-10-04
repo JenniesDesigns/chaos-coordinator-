@@ -314,6 +314,20 @@ body[data-accent="purple"]{--pink:#a879ff}
 body[data-accent="teal"]{--pink:#42e0d0}
 body[data-accent="red"]{--pink:#ff5c68}
 @media(max-width:760px){.settings-grid{grid-template-columns:1fr}.setting-checks{grid-template-columns:1fr}.settings-savebar{align-items:stretch;flex-direction:column}.settings-savebar button{width:100%}}
+</style><style>
+@media(max-width:700px){
+  .toast{
+    position:fixed!important;
+    left:16px!important;
+    right:16px!important;
+    bottom:calc(84px + env(safe-area-inset-bottom, 0px))!important;
+    width:auto!important;
+    max-width:none!important;
+    box-sizing:border-box!important;
+    z-index:10050!important;
+    text-align:center;
+  }
+}
 </style></head>
 <body>
 
@@ -346,7 +360,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15 · Make It Yours</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.0.1 · Mobile Toast Fix</div>
   </div>
 </div>
 
