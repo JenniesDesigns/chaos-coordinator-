@@ -187,7 +187,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v7.2.1 · Housekeeping magic</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v7.2.2 · Housekeeping magic</div>
   </div>
 </div>
 
@@ -355,6 +355,25 @@ input,select,textarea,button{max-width:100%}
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<div id="choreEditModal" class="cc-modal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2>Edit chore</h2>
+    <form id="choreEditForm">
+      <input id="editChoreId" type="hidden">
+      <label class="field">Chore<input id="editChoreTitle" required></label>
+      <label class="field">Room<input id="editChoreRoom" list="roomSuggestions"></label>
+      <label class="field">Repeat<select id="editChoreRepeat">
+        <option value="none">One time</option><option value="daily">Daily</option><option value="weekly">Weekly</option>
+        <option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option><option value="quarterly">Every 3 months</option>
+        <option value="semiannual">Twice a year</option><option value="yearly">Yearly</option>
+      </select></label>
+      <label class="field">Due date<input id="editChoreDue" type="date" required></label>
+      <div class="cc-modal-actions"><button id="cancelChoreEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
+    </form>
+  </div>
+</div>
+
 <script>
 const SUPABASE_URL = "https://yuwlxolcknozudlhtvfr.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_85J_B7ktksZwn5EZsGswsQ_PWjvSb8R";
@@ -801,23 +820,5 @@ if(restored?.user) startApp(restored.user);
 
 
 </script>
-
-<div id="choreEditModal" class="cc-modal" aria-hidden="true">
-  <div class="cc-modal-card">
-    <h2>Edit chore</h2>
-    <form id="choreEditForm">
-      <input id="editChoreId" type="hidden">
-      <label class="field">Chore<input id="editChoreTitle" required></label>
-      <label class="field">Room<input id="editChoreRoom" list="roomSuggestions"></label>
-      <label class="field">Repeat<select id="editChoreRepeat">
-        <option value="none">One time</option><option value="daily">Daily</option><option value="weekly">Weekly</option>
-        <option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option><option value="quarterly">Every 3 months</option>
-        <option value="semiannual">Twice a year</option><option value="yearly">Yearly</option>
-      </select></label>
-      <label class="field">Due date<input id="editChoreDue" type="date" required></label>
-      <div class="cc-modal-actions"><button id="cancelChoreEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
-    </form>
-  </div>
-</div>
 </body>
 </html>
