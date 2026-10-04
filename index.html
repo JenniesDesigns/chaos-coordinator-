@@ -206,7 +206,32 @@ input,select,textarea,button{max-width:100%}
  .month-day.many-events::after{content:"••"}
  .calendar-head{align-items:flex-start}.calendar-nav-actions{gap:4px}
 }
-</style></head>
+</style>
+<style>
+/* V13.3.2 dark-mode visibility fix */
+.month-day,.month-day .day-number{
+  color:#f7f2ff !important;
+}
+.month-day.other-month,.month-day.other-month .day-number{
+  color:#c8bdd8 !important;
+  opacity:.62;
+}
+.month-day.today .day-number{
+  color:#ffffff !important;
+}
+input[type="date"],input[type="time"],input[type="datetime-local"]{
+  color-scheme:dark;
+  color:#f7f2ff;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+  filter:invert(1) brightness(1.8);
+  opacity:.95;
+  cursor:pointer;
+}
+</style>
+</head>
 <body>
 
 <style>
@@ -238,7 +263,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.3.1 · Real Calendar</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.3.2 · Dark Mode Calendar Fix</div>
   </div>
 </div>
 
