@@ -118,7 +118,7 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · auth fix v5 · no CDN</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v6 · Calendar + Goals sync</div>
   </div>
 </div>
 
@@ -297,16 +297,26 @@ function renderEvents(){
     main.append(title,detail);
     const del=document.createElement("button");del.className="entry-action";del.textContent="Remove";
     del.addEventListener("click",async()=>{
-      const {error}=await supabase.from("events").delete().eq("id",e.id).eq("user_id",currentUser.id);
-      if(error){toast("Couldn't remove that event.");return}
-      events=events.filter(x=>x.id!==e.id);renderEvents();toast("Event removed.");
+      try{
+        await supabaseRequest("/rest/v1/events?id=eq."+encodeURIComponent(e.id),{method:"DELETE"});
+        events=events.filter(x=>x.id!==e.id);renderEvents();toast("Event removed.");
+      }catch(err){console.error(err);toast("Couldn't remove that event.");}
     });
     row.append(main,del);list.append(row);
   });
 }
 
 async function loadEvents(){
-  events=[]; renderEvents();
+  try{
+    const data=await supabaseRequest("/rest/v1/events?select=*&order=event_date.asc,event_time.asc",{
+      headers:{"Accept":"application/json"}
+    });
+    events=Array.isArray(data)?data:[];
+    renderEvents();
+  }catch(err){
+    console.error(err);
+    toast("Couldn't load your calendar.");
+  }
 }
 
 function renderGoals(){
@@ -319,33 +329,80 @@ function renderGoals(){
     const row=document.createElement("div");row.className="entry"+(g.completed?" done":"");
     const check=document.createElement("input");check.type="checkbox";check.className="goalcheck";check.checked=!!g.completed;check.setAttribute("aria-label","Mark goal complete");
     check.addEventListener("change",async()=>{
-      const {error}=await supabase.from("goals").update({completed:check.checked}).eq("id",g.id).eq("user_id",currentUser.id);
-      if(error){check.checked=!check.checked;toast("Couldn't update that goal.");return}
-      g.completed=check.checked;renderGoals();
+      try{
+        await supabaseRequest("/rest/v1/goals?id=eq."+encodeURIComponent(g.id),{
+          method:"PATCH",
+          headers:{"Prefer":"return=minimal"},
+          body:JSON.stringify({completed:check.checked})
+        });
+        g.completed=check.checked;renderGoals();
+      }catch(err){console.error(err);check.checked=!check.checked;toast("Couldn't update that goal.");}
     });
     const main=document.createElement("div");main.className="entry-main";
     const title=document.createElement("strong");title.textContent=g.title;main.append(title);
     if(g.description){const detail=document.createElement("small");detail.textContent=g.description;main.append(detail)}
     const del=document.createElement("button");del.className="entry-action";del.textContent="Remove";
     del.addEventListener("click",async()=>{
-      const {error}=await supabase.from("goals").delete().eq("id",g.id).eq("user_id",currentUser.id);
-      if(error){toast("Couldn't remove that goal.");return}
-      goals=goals.filter(x=>x.id!==g.id);renderGoals();toast("Goal removed.");
+      try{
+        await supabaseRequest("/rest/v1/goals?id=eq."+encodeURIComponent(g.id),{method:"DELETE"});
+        goals=goals.filter(x=>x.id!==g.id);renderGoals();toast("Goal removed.");
+      }catch(err){console.error(err);toast("Couldn't remove that goal.");}
     });
     row.append(check,main,del);list.append(row);
   });
 }
 
 async function loadGoals(){
-  goals=[]; renderGoals();
+  try{
+    const data=await supabaseRequest("/rest/v1/goals?select=*&order=created_at.asc",{
+      headers:{"Accept":"application/json"}
+    });
+    goals=Array.isArray(data)?data:[];
+    renderGoals();
+  }catch(err){
+    console.error(err);
+    toast("Couldn't load your goals.");
+  }
 }
 
-eventForm.addEventListener("submit",e=>{
-  e.preventDefault(); toast("Calendar saving comes next — authentication is now being tested.");
+eventForm.addEventListener("submit",async e=>{
+  e.preventDefault();
+  if(!currentUser){toast("Please sign in first.");return}
+  const title=document.getElementById("eventTitle").value.trim();
+  const date=document.getElementById("eventDate").value;
+  const time=document.getElementById("eventTime").value||null;
+  try{
+    const data=await supabaseRequest("/rest/v1/events",{
+      method:"POST",
+      headers:{"Prefer":"return=representation","Accept":"application/json"},
+      body:JSON.stringify({user_id:currentUser.id,title,event_date:date,event_time:time})
+    });
+    if(Array.isArray(data)&&data[0]) events.push(data[0]);
+    eventForm.reset();
+    document.getElementById("eventDate").value=localDate;
+    renderEvents();
+    toast("Saved to your calendar!");
+  }catch(err){
+    console.error(err); toast("Couldn't save that event.");
+  }
 });
 
-goalForm.addEventListener("submit",e=>{
-  e.preventDefault(); toast("Goal saving comes next — authentication is now being tested.");
+goalForm.addEventListener("submit",async e=>{
+  e.preventDefault();
+  if(!currentUser){toast("Please sign in first.");return}
+  const title=document.getElementById("goalTitle").value.trim();
+  const description=document.getElementById("goalDetail").value.trim()||null;
+  try{
+    const data=await supabaseRequest("/rest/v1/goals",{
+      method:"POST",
+      headers:{"Prefer":"return=representation","Accept":"application/json"},
+      body:JSON.stringify({user_id:currentUser.id,title,description,completed:false})
+    });
+    if(Array.isArray(data)&&data[0]) goals.push(data[0]);
+    goalForm.reset(); renderGoals(); toast("Goal saved!");
+  }catch(err){
+    console.error(err); toast("Couldn't save that goal.");
+  }
 });
 
 const authGate=document.getElementById("authGate");
@@ -376,13 +433,12 @@ async function doCreateAccount(){
       body:JSON.stringify({email,password})
     });
     if(data.access_token) saveSession(data);
-    if(data.user && data.access_token){
+    const createdUser=data.user||data;
+    if(data.access_token && createdUser?.id){
       setAuthMessage("Account created! Opening Chaos Coordinator...");
-      await startApp(data.user);
-    }else if(data.user){
-      setAuthMessage("Account created! Check your email for the confirmation message, then come back and sign in.");
+      await startApp(createdUser);
     }else{
-      setAuthMessage("Supabase responded, but did not return a user. Tell me exactly what you see.",true);
+      setAuthMessage("Account created! Check your email for the confirmation message, then come back and sign in.");
     }
   }catch(err){
     console.error(err);
