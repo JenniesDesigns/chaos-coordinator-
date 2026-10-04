@@ -206,7 +206,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8 · Live Dashboard</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.1 · Live Dashboard fix</div>
   </div>
 </div>
 
@@ -503,8 +503,6 @@ function renderEvents(){
     });
     row.append(main,del);list.append(row);
   });
-
-  if(typeof renderDashboard==='function') renderDashboard();
 }
 
 async function loadEvents(){
@@ -551,8 +549,6 @@ function renderGoals(){
     });
     row.append(check,main,del);list.append(row);
   });
-
-  if(typeof renderDashboard==='function') renderDashboard();
 }
 
 async function loadGoals(){
@@ -619,9 +615,12 @@ function shortMonthDay(date){
   return {mon:d.toLocaleDateString(undefined,{month:"short"}),day:d.getDate()};
 }
 function renderDashboard(){
-  const due=chores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate));
-  const futureEvents=events.filter(e=>dashboardEventDate(e)>=localDate).sort((a,b)=>(dashboardEventDate(a)+dashboardEventTime(a)).localeCompare(dashboardEventDate(b)+dashboardEventTime(b)));
-  const activeGoals=goals.filter(g=>!g.completed);
+  const safeChores=(typeof chores==="undefined"?[]:chores);
+  const safeEvents=(typeof events==="undefined"?[]:events);
+  const safeGoals=(typeof goals==="undefined"?[]:goals);
+  const due=safeChores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate));
+  const futureEvents=safeEvents.filter(e=>dashboardEventDate(e)>=localDate).sort((a,b)=>(dashboardEventDate(a)+dashboardEventTime(a)).localeCompare(dashboardEventDate(b)+dashboardEventTime(b)));
+  const activeGoals=safeGoals.filter(g=>!g.completed);
 
   const dc=document.getElementById("dashDueCount"),ec=document.getElementById("dashEventCount"),gc=document.getElementById("dashGoalCount");
   if(dc)dc.textContent=due.length;if(ec)ec.textContent=futureEvents.length;if(gc)gc.textContent=activeGoals.length;
