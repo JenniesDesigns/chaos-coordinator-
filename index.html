@@ -107,15 +107,19 @@ h1{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:3px 0 0;letter-spacing
   <div class="auth-card">
     <div class="brandmark"><span class="skull">☠</span><span>Chaos<br>Coordinator<span style="color:var(--pink)"> ♡</span></span></div>
     <div style="color:var(--teal);letter-spacing:2px;font-size:10px;font-weight:800;margin-top:12px">YOUR LIFE, YOUR CHAOS</div>
-    <h1 style="margin-top:18px">Let's get you signed in.</h1>
-    <p>Your calendar and goals will be saved securely to your Chaos Coordinator account.</p>
+    <h1 id="authHeading" style="margin-top:18px">Welcome back.</h1>
+    <p id="authIntro">Sign in to your Chaos Coordinator account.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0">
+      <button class="primary" id="modeSignIn" type="button">Sign in</button>
+      <button class="linkbtn" id="modeCreate" type="button">Create account</button>
+    </div>
     <form id="authForm">
       <label>Email <input id="authEmail" type="email" autocomplete="email" required placeholder="you@example.com"></label>
       <label>Password <input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="At least 6 characters"></label>
       <button class="primary" id="authSubmit" type="submit">Sign in</button>
     </form>
-    <button class="linkbtn" id="authToggle" type="button">Need an account? Create one</button>
     <div class="auth-msg" id="authMsg"></div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · auth fix v3</div>
   </div>
 </div>
 
@@ -318,52 +322,76 @@ goalForm.addEventListener("submit",async e=>{
 
 const authGate=document.getElementById("authGate");
 const authForm=document.getElementById("authForm");
-const authToggle=document.getElementById("authToggle");
 const authSubmit=document.getElementById("authSubmit");
 const authMsg=document.getElementById("authMsg");
 const userEmail=document.getElementById("userEmail");
+const modeSignIn=document.getElementById("modeSignIn");
+const modeCreate=document.getElementById("modeCreate");
+const authHeading=document.getElementById("authHeading");
+const authIntro=document.getElementById("authIntro");
 let signUpMode=false;
 
-function setAuthMessage(msg,error=false){authMsg.textContent=msg;authMsg.className="auth-msg"+(error?" auth-error":"")}
-
-authToggle.addEventListener("click",()=>{
-  signUpMode=!signUpMode;
-  authSubmit.textContent=signUpMode?"Create account":"Sign in";
-  authToggle.textContent=signUpMode?"Already have an account? Sign in":"Need an account? Create one";
+function setAuthMessage(msg,error=false){
+  authMsg.textContent=msg;
+  authMsg.className="auth-msg"+(error?" auth-error":"");
+}
+function setAuthMode(create){
+  signUpMode=create;
+  authHeading.textContent=create?"Create your account.":"Welcome back.";
+  authIntro.textContent=create
+    ?"Create an account so your Chaos Coordinator data can sync across devices."
+    :"Sign in to your Chaos Coordinator account.";
+  authSubmit.textContent=create?"Create account":"Sign in";
+  document.getElementById("authPassword").autocomplete=create?"new-password":"current-password";
+  modeSignIn.style.opacity=create?".65":"1";
+  modeCreate.style.opacity=create?"1":".65";
   setAuthMessage("");
-});
+}
+modeSignIn.addEventListener("click",()=>setAuthMode(false));
+modeCreate.addEventListener("click",()=>setAuthMode(true));
+setAuthMode(false);
+
+function authWithTimeout(promise){
+  return Promise.race([
+    promise,
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error("Supabase did not respond within 15 seconds.")),15000))
+  ]);
+}
 
 authForm.addEventListener("submit",async e=>{
   e.preventDefault();
-  setAuthMessage("Working...");
   const email=document.getElementById("authEmail").value.trim();
   const password=document.getElementById("authPassword").value;
-  try {
-    const authRequest = signUpMode
-      ? supabase.auth.signUp({email,password})
-      : supabase.auth.signInWithPassword({email,password});
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Supabase did not respond within 15 seconds. Check your connection and try again.")), 15000)
-    );
-    const result = await Promise.race([authRequest, timeout]);
-    if(result.error){setAuthMessage(result.error.message,true);return}
-    if(signUpMode && !result.data.session){
-      setAuthMessage("Account created. Check your email to confirm it, then sign in.");
-      return;
+  authSubmit.disabled=true;
+  setAuthMessage(signUpMode?"Creating account...":"Signing in...");
+  try{
+    const result=signUpMode
+      ? await authWithTimeout(supabase.auth.signUp({
+          email,
+          password,
+          options:{emailRedirectTo:window.location.origin+window.location.pathname}
+        }))
+      : await authWithTimeout(supabase.auth.signInWithPassword({email,password}));
+    if(result.error) throw result.error;
+    if(signUpMode){
+      if(result.data.session && result.data.user){
+        setAuthMessage("Account created! Opening Chaos Coordinator...");
+        await startApp(result.data.user);
+      }else{
+        setAuthMessage("Account created. Check your email for the confirmation link, then come back and sign in.");
+      }
+    }else if(result.data.user){
+      await startApp(result.data.user);
+    }else{
+      throw new Error("Supabase did not return a user.");
     }
-    if(result.data.user) await startApp(result.data.user);
-  } catch (err) {
-    console.error(err);
-    setAuthMessage(err?.message || "Could not connect to Supabase. Please try again.", true);
+  }catch(err){
+    console.error("Chaos Coordinator auth error:",err);
+    setAuthMessage(err?.message||"Authentication failed. Please try again.",true);
+  }finally{
+    authSubmit.disabled=false;
   }
 });
-
-async function startApp(user){
-  currentUser=user;
-  userEmail.textContent=user.email||"Account";
-  authGate.style.display="none";
-  await Promise.all([loadEvents(),loadGoals()]);
-}
 
 document.getElementById("signOutBtn").addEventListener("click",async()=>{
   await supabase.auth.signOut();
