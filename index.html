@@ -205,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.1 · Debts & Savings</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.1.1 · Mobile Date Fix</div>
   </div>
 </div>
 
@@ -586,7 +586,12 @@ input,select,textarea,button{max-width:100%}
       <input id="editBillId" type="hidden">
       <label class="field">Bill name<input id="editBillName" required maxlength="120"></label>
       <label class="field">Amount<input id="editBillAmount" required type="number" min="0" step="0.01"></label>
-      <label class="field">Due date<input id="editBillDue" required type="date"></label>
+      <label class="field">Due date
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="editBillDue" required type="date" style="flex:1">
+          <button id="editBillDuePicker" type="button" aria-label="Open calendar" title="Open calendar">📅</button>
+        </div>
+      </label>
       <label class="field">Repeats<select id="editBillRecurrence"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks</option><option value="quarterly">Every 3 months</option><option value="semiannual">Every 6 months</option><option value="yearly">Yearly</option><option value="none">One-time</option></select></label>
       <label class="field">Category<select id="editBillCategory"><option>Housing</option><option>Utilities</option><option>Insurance</option><option>Phone / Internet</option><option>Transportation</option><option>Subscriptions</option><option>Debt</option><option>Medical</option><option>Other</option></select></label>
       <label class="field"><span><input id="editBillAutopay" type="checkbox" style="width:auto;margin-right:8px">Autopay</span></label>
@@ -608,6 +613,20 @@ input,select,textarea,button{max-width:100%}
         <button class="primary" type="submit">Save</button>
       </div>
     </form>
+  </div>
+</div>
+<div class="cc-modal" id="dateFallbackModal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2>Choose due date</h2>
+    <div class="formgrid">
+      <label class="field">Month<select id="fallbackMonth"></select></label>
+      <label class="field">Day<select id="fallbackDay"></select></label>
+      <label class="field">Year<select id="fallbackYear"></select></label>
+      <div class="cc-modal-actions">
+        <button id="cancelDateFallback" type="button">Cancel</button>
+        <button id="saveDateFallback" class="primary" type="button">Use this date</button>
+      </div>
+    </div>
   </div>
 </div>
 <script>
@@ -1413,6 +1432,33 @@ document.getElementById("moneyAdjustForm").addEventListener("submit",async e=>{
     closeMoneyAdjust();
   }catch(err){console.error(err);toast("Couldn't update that amount.")}
 });
+
+
+// ---- Mobile-safe bill date picker (v13.1.1) ----
+function populateDateFallback(){
+  const input=document.getElementById("editBillDue"),parts=(input.value||new Date().toISOString().slice(0,10)).split("-").map(Number);
+  const y=parts[0],m=parts[1],d=parts[2],month=document.getElementById("fallbackMonth"),day=document.getElementById("fallbackDay"),year=document.getElementById("fallbackYear");
+  month.innerHTML="";for(let i=1;i<=12;i++){const o=document.createElement("option");o.value=i;o.textContent=new Date(2000,i-1,1).toLocaleString("en-US",{month:"long"});month.append(o)}
+  year.innerHTML="";for(let i=y-5;i<=y+10;i++){const o=document.createElement("option");o.value=i;o.textContent=i;year.append(o)}
+  month.value=m;year.value=y;
+  function days(){const max=new Date(Number(year.value),Number(month.value),0).getDate(),wanted=Math.min(Number(day.value)||d,max);day.innerHTML="";for(let i=1;i<=max;i++){const o=document.createElement("option");o.value=i;o.textContent=i;day.append(o)}day.value=wanted}
+  month.onchange=days;year.onchange=days;days();day.value=Math.min(d,new Date(y,m,0).getDate());
+}
+function openDateFallback(){
+  populateDateFallback();const m=document.getElementById("dateFallbackModal");m.classList.add("open");m.setAttribute("aria-hidden","false");
+}
+function closeDateFallback(){const m=document.getElementById("dateFallbackModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
+document.getElementById("editBillDuePicker").addEventListener("click",()=>{
+  const input=document.getElementById("editBillDue");
+  try{if(typeof input.showPicker==="function"){input.showPicker();return}}catch(err){console.warn("Native date picker unavailable",err)}
+  openDateFallback();
+});
+document.getElementById("cancelDateFallback").addEventListener("click",closeDateFallback);
+document.getElementById("saveDateFallback").addEventListener("click",()=>{
+  const y=document.getElementById("fallbackYear").value,m=String(document.getElementById("fallbackMonth").value).padStart(2,"0"),d=String(document.getElementById("fallbackDay").value).padStart(2,"0");
+  document.getElementById("editBillDue").value=y+"-"+m+"-"+d;closeDateFallback();
+});
+document.getElementById("dateFallbackModal").addEventListener("click",e=>{if(e.target.id==="dateFallbackModal")closeDateFallback()});
 
 // ---- Session refresh (v7.2) ----
 async function refreshSession(){
