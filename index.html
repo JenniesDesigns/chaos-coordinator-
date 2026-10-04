@@ -201,7 +201,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v9.1 · Starter Chore Library</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v10 · Projects</div>
   </div>
 </div>
 
@@ -316,7 +316,32 @@ input,select,textarea,button{max-width:100%}
     </div>
   </div>
 </section>
-  <section class="view" id="projects"><div class="card placeholder"><div><div class="big">⚒️</div><h2>Projects</h2><p>Keep ideas, materials, budgets, and progress together.</p><button class="linkbtn" onclick="toast('Projects is ready for the next build step.')">Plan this section →</button></div></div></section>
+  <section class="view" id="projects">
+  <div class="hero">
+    <div class="eyebrow">PROJECTS WITHOUT THE PILE OF STICKY NOTES</div>
+    <h2>Build it. Fix it. Finish it-ish.</h2>
+    <p>Keep the things you want to build, change, organize, or create in one place.</p>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <h2>Add a project <span>Big idea, small project, whatever counts</span></h2>
+    <form id="projectForm" class="formgrid">
+      <label class="field">Project name<input id="projectTitle" required maxlength="120" placeholder="e.g. Renovate bedroom"></label>
+      <label class="field">Status<select id="projectStatus"><option value="idea">Idea</option><option value="planning">Planning</option><option value="active" selected>Active</option><option value="paused">Paused</option><option value="complete">Complete</option></select></label>
+      <label class="field">Target date<input id="projectDue" type="date"></label>
+      <label class="field" style="grid-column:1/-1">Notes<textarea id="projectDescription" rows="3" placeholder="What are you trying to do? Materials, ideas, reminders..."></textarea></label>
+      <button class="primary" type="submit">＋ Add project</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>My projects <span id="projectCount">0 projects</span></h2>
+    <div class="chore-filter">
+      <button type="button" class="active" data-project-filter="open">Open</button>
+      <button type="button" data-project-filter="all">All</button>
+      <button type="button" data-project-filter="complete">Completed</button>
+    </div>
+    <div id="projectList" class="empty">No projects yet. Suspiciously responsible. ✦</div>
+  </div>
+</section>
   <section class="view" id="groceries"><div class="card placeholder"><div><div class="big">🛒</div><h2>Food & Groceries</h2><p>Meal plans, pantry inventory, freezer inventory, and shopping lists.</p><button class="linkbtn" onclick="toast('Food & Groceries is ready for the next build step.')">Plan this section →</button></div></div></section>
   <section class="view" id="finances"><div class="card placeholder"><div><div class="big">💰</div><h2>Bills & Finances</h2><p>Track bills, monthly budgets, debt, and savings goals in one place.</p><button class="linkbtn" onclick="toast('Bills & Finances is ready for the next build step.')">Plan this section →</button></div></div></section>
   <section class="view" id="calendar">
@@ -388,6 +413,19 @@ input,select,textarea,button{max-width:100%}
   </div>
 </div>
 
+<div class="modal-backdrop" id="projectEditModal" aria-hidden="true">
+  <div class="modal-card">
+    <h2>Edit project</h2>
+    <form id="projectEditForm" class="formgrid">
+      <input id="editProjectId" type="hidden">
+      <label class="field">Project name<input id="editProjectTitle" required maxlength="120"></label>
+      <label class="field">Status<select id="editProjectStatus"><option value="idea">Idea</option><option value="planning">Planning</option><option value="active">Active</option><option value="paused">Paused</option><option value="complete">Complete</option></select></label>
+      <label class="field">Target date<input id="editProjectDue" type="date"></label>
+      <label class="field" style="grid-column:1/-1">Notes<textarea id="editProjectDescription" rows="3"></textarea></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="primary" type="submit">Save changes</button><button id="cancelProjectEdit" type="button">Cancel</button></div>
+    </form>
+  </div>
+</div>
 <script>
 const SUPABASE_URL = "https://yuwlxolcknozudlhtvfr.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_85J_B7ktksZwn5EZsGswsQ_PWjvSb8R";
@@ -812,6 +850,47 @@ function renderDashboardChores(){
   target.className="today-chore-list";due.forEach(c=>{const d=document.createElement("div");d.className="today-chore";const x=document.createElement("input");x.type="checkbox";x.className="chore-check";const s=document.createElement("span");s.textContent=c.title+(taskRoom(c)?" · "+taskRoom(c):"");x.addEventListener("change",()=>{const row=choreRow(c),box=row.querySelector(".chore-check");box.checked=true;box.dispatchEvent(new Event("change"))});d.append(x,s);target.append(d)})
 }
 
+
+// ---- Projects (v10) ----
+let projects=[],projectFilter="open";
+const projectForm=document.getElementById("projectForm"),projectEditModal=document.getElementById("projectEditModal");
+function projectStatusLabel(s){return ({idea:"Idea",planning:"Planning",active:"Active",paused:"Paused",complete:"Complete"})[s]||s||"Active"}
+function projectRow(p){
+  const row=document.createElement("div");row.className="entry";
+  const main=document.createElement("div");main.className="entry-main";
+  const title=document.createElement("strong");title.textContent=p.title;
+  const detail=document.createElement("small");detail.textContent=projectStatusLabel(p.status)+(p.due_date?" · Target "+prettyDate(p.due_date):" · No target date");
+  main.append(title,detail);
+  if(p.description){const note=document.createElement("small");note.textContent=p.description;main.append(note)}
+  const actions=document.createElement("div");actions.className="chore-actions";
+  const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openProjectEdit(p));
+  const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",async()=>{if(!confirm("Remove this project?"))return;try{await supabaseRequest("/rest/v1/projects?id=eq."+encodeURIComponent(p.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadProjects();toast("Project removed.")}catch(err){console.error(err);toast("Couldn't remove that project.")}});
+  actions.append(edit,del);row.append(main,actions);return row;
+}
+function renderProjects(){
+  const target=document.getElementById("projectList");let shown=projects.slice();
+  if(projectFilter==="open")shown=shown.filter(p=>p.status!=="complete");
+  if(projectFilter==="complete")shown=shown.filter(p=>p.status==="complete");
+  shown.sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
+  document.getElementById("projectCount").textContent=projects.length+" project"+(projects.length===1?"":"s");
+  target.innerHTML="";if(!shown.length){target.className="empty";target.textContent=projectFilter==="complete"?"No completed projects yet.":"No projects here yet. ✦";return}
+  target.className="";shown.forEach(p=>target.append(projectRow(p)));
+}
+async function loadProjects(){try{const data=await supabaseRequest("/rest/v1/projects?select=*&order=created_at.desc",{headers:{"Accept":"application/json"}});projects=Array.isArray(data)?data:[];renderProjects()}catch(err){console.error(err);toast("Couldn't load projects.")}}
+projectForm.addEventListener("submit",async e=>{
+  e.preventDefault();const title=document.getElementById("projectTitle").value.trim(),description=document.getElementById("projectDescription").value.trim(),status=document.getElementById("projectStatus").value,due_date=document.getElementById("projectDue").value||null;
+  try{await supabaseRequest("/rest/v1/projects",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,description,status,due_date})});projectForm.reset();document.getElementById("projectStatus").value="active";await loadProjects();toast("Project added. Let's make trouble. ✦")}catch(err){console.error(err);toast("Couldn't add that project: "+(err.message||"unknown error"))}
+});
+document.querySelectorAll("[data-project-filter]").forEach(b=>b.addEventListener("click",()=>{projectFilter=b.dataset.projectFilter;document.querySelectorAll("[data-project-filter]").forEach(x=>x.classList.toggle("active",x===b));renderProjects()}));
+function openProjectEdit(p){document.getElementById("editProjectId").value=p.id;document.getElementById("editProjectTitle").value=p.title;document.getElementById("editProjectDescription").value=p.description||"";document.getElementById("editProjectStatus").value=p.status||"active";document.getElementById("editProjectDue").value=p.due_date||"";projectEditModal.classList.add("open");projectEditModal.setAttribute("aria-hidden","false")}
+function closeProjectEdit(){projectEditModal.classList.remove("open");projectEditModal.setAttribute("aria-hidden","true")}
+document.getElementById("cancelProjectEdit").addEventListener("click",closeProjectEdit);
+projectEditModal.addEventListener("click",e=>{if(e.target===projectEditModal)closeProjectEdit()});
+document.getElementById("projectEditForm").addEventListener("submit",async e=>{
+  e.preventDefault();const id=document.getElementById("editProjectId").value,title=document.getElementById("editProjectTitle").value.trim(),description=document.getElementById("editProjectDescription").value.trim(),status=document.getElementById("editProjectStatus").value,due_date=document.getElementById("editProjectDue").value||null;
+  try{await supabaseRequest("/rest/v1/projects?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description,status,due_date})});closeProjectEdit();await loadProjects();toast("Project updated.")}catch(err){console.error(err);toast("Couldn't save that project.")}
+});
+
 // ---- Session refresh (v7.2) ----
 async function refreshSession(){
   const saved=JSON.parse(localStorage.getItem("chaos_coordinator_session_v5")||"null");
@@ -917,7 +996,7 @@ async function startApp(user){
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
@@ -940,7 +1019,7 @@ async function refreshCloudView(){
   if(now-ccLastCloudRefresh<5000)return;
   ccLastCloudRefresh=now;
   await loadSpaces();
-  await Promise.all([loadEvents(),loadGoals(),loadChores()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects()]);
   await loadHousekeepingSettings();
   renderLiveDashboard();
 }
