@@ -201,7 +201,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.8 · Chore render repair</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v9.0 · Cloud Housekeeping</div>
   </div>
 </div>
 
@@ -597,71 +597,68 @@ const defaultSpaces=[
   {name:"Office",area:"inside"},{name:"Bedroom",area:"inside"},
   {name:"Yard",area:"outside"},{name:"Garden",area:"outside"},{name:"Patio / deck",area:"outside"}
 ];
-function loadSpaces(){
-  let saved=null;try{saved=JSON.parse(localStorage.getItem("cc_spaces_v86")||"null")}catch(_){}
-  let list=Array.isArray(saved)?saved:[];
-  // Repair any malformed/string-only saved values.
-  list=list.map(x=>typeof x==="string"?{name:x,area:"inside"}:x).filter(x=>x&&x.name&&["inside","outside"].includes(x.area));
-  defaultSpaces.forEach(d=>{if(!list.some(x=>x.name.toLowerCase()===d.name.toLowerCase()))list.push({...d})});
-  localStorage.setItem("cc_spaces_v86",JSON.stringify(list));return list;
-}
-let spaces=loadSpaces();
-let manualFocus=localStorage.getItem("cc_room_focus_v72")||"";
-function taskRepeat(c){const m=(c.description||"").match(/\[CC_REPEAT:([^\]]+)\]/);return m?m[1]:(c.recurring?"weekly":"none")}
-function taskRoom(c){const m=(c.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
-function taskArea(c){
-  const m=(c.description||"").match(/\[CC_AREA:([^\]]+)\]/);if(m)return m[1];
-  const room=taskRoom(c);const s=spaces.find(x=>x.name.toLowerCase()===room.toLowerCase());return s?s.area:"inside";
-}
+let spaces=[],manualFocus="",housekeepingSettings=null;
+function taskRepeat(c){if(c.recurrence)return c.recurrence;const m=(c.description||"").match(/\[CC_REPEAT:([^\]]+)\]/);return m?m[1]:(c.recurring?"weekly":"none")}
+function roomById(id){return spaces.find(s=>s.id===id)}
+function taskRoom(c){const linked=roomById(c.room_id);if(linked)return linked.name;const m=(c.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
+function taskArea(c){const linked=roomById(c.room_id);if(linked)return linked.area;if(c.area)return c.area;const m=(c.description||"").match(/\[CC_AREA:([^\]]+)\]/);return m?m[1]:"inside"}
 function taskDescription(room,repeat,area="inside"){return `[CC_ROOM:${room}] [CC_REPEAT:${repeat}] [CC_AREA:${area}]`}
-function recurrenceLabel(value){
-  return ({none:"One time",daily:"Daily",weekly:"Weekly",biweekly:"Every 2 weeks",monthly:"Monthly",quarterly:"Every 3 months",semiannual:"Twice a year",yearly:"Yearly"})[value]||"One time";
-}
-function insideRooms(){return spaces.filter(s=>s.area==="inside").map(s=>s.name)}
-function rotationFocus(){
-  const rooms=insideRooms();
-  if(manualFocus&&rooms.includes(manualFocus))return manualFocus;
-  if(!rooms.length)return "";
-  const epoch=new Date("2026-01-05T12:00:00"),now=new Date(localDate+"T12:00:00");
-  const week=Math.floor((now-epoch)/(7*86400000));return rooms[((week%rooms.length)+rooms.length)%rooms.length];
-}
-function saveSpaces(){localStorage.setItem("cc_spaces_v86",JSON.stringify(spaces));renderRooms()}
+function recurrenceLabel(value){return ({none:"One time",daily:"Daily",weekly:"Weekly",biweekly:"Every 2 weeks",monthly:"Monthly",quarterly:"Every 3 months",semiannual:"Twice a year",yearly:"Yearly"})[value]||"One time"}
+function rotationFocus(){const r=roomById(housekeepingSettings?.focus_room_id);return r?.name||""}
 function fillRoomSelect(select,area,value=""){
-  const names=spaces.filter(s=>s.area===area).map(s=>s.name);select.innerHTML="";
-  names.forEach(name=>{const o=document.createElement("option");o.value=name;o.textContent=name;select.append(o)});
-  if(value&&!names.includes(value)){const o=document.createElement("option");o.value=value;o.textContent=value;select.append(o)}
+  const choices=spaces.filter(s=>s.area===area&&s.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)||a.name.localeCompare(b.name));
+  select.innerHTML="";choices.forEach(s=>{const o=document.createElement("option");o.value=s.name;o.dataset.roomId=s.id;o.textContent=s.name;select.append(o)});
   if(value)select.value=value;
 }
-function renderRoomSuggestions(){
-  fillRoomSelect(document.getElementById("choreRoom"),document.getElementById("choreArea").value);
+function selectedRoomId(select){return select.selectedOptions[0]?.dataset.roomId||null}
+function renderRoomSuggestions(){fillRoomSelect(document.getElementById("choreRoom"),document.getElementById("choreArea").value)}
+async function seedDefaultSpaces(){
+  if(spaces.length)return;
+  const rows=defaultSpaces.map((s,i)=>({user_id:currentUser.id,name:s.name,area:s.area,sort_order:i,active:true}));
+  await supabaseRequest("/rest/v1/rooms",{method:"POST",headers:{"Prefer":"return=representation","Accept":"application/json"},body:JSON.stringify(rows)});
+}
+async function loadSpaces(){
+  const data=await supabaseRequest("/rest/v1/rooms?select=*&order=sort_order.asc",{headers:{"Accept":"application/json"}});
+  spaces=Array.isArray(data)?data:[];
+  if(!spaces.length){await seedDefaultSpaces();const again=await supabaseRequest("/rest/v1/rooms?select=*&order=sort_order.asc",{headers:{"Accept":"application/json"}});spaces=Array.isArray(again)?again:[]}
+  renderRooms();
+}
+async function loadHousekeepingSettings(){
+  const data=await supabaseRequest("/rest/v1/housekeeping_settings?select=*&limit=1",{headers:{"Accept":"application/json"}});
+  housekeepingSettings=Array.isArray(data)&&data[0]?data[0]:null;
+  if(!housekeepingSettings){
+    const kitchen=spaces.find(s=>s.name==="Kitchen"&&s.area==="inside")||spaces.find(s=>s.area==="inside");
+    const made=await supabaseRequest("/rest/v1/housekeeping_settings",{method:"POST",headers:{"Prefer":"return=representation","Accept":"application/json"},body:JSON.stringify({user_id:currentUser.id,focus_room_id:kitchen?.id||null})});
+    housekeepingSettings=Array.isArray(made)?made[0]:null;
+  }
+  manualFocus=rotationFocus();renderRooms();renderLiveDashboard();
+}
+async function setCloudFocus(s){
+  try{
+    await supabaseRequest("/rest/v1/housekeeping_settings?user_id=eq."+encodeURIComponent(currentUser.id),{method:"PATCH",headers:{"Prefer":"return=representation","Accept":"application/json"},body:JSON.stringify({focus_room_id:s.id,updated_at:new Date().toISOString()})});
+    housekeepingSettings={...(housekeepingSettings||{}),user_id:currentUser.id,focus_room_id:s.id};manualFocus=s.name;renderRooms();renderLiveDashboard();toast(s.name+" is now the synced focus room.");
+  }catch(err){console.error(err);toast("Couldn't sync the focus room.")}
 }
 function roomCard(s,focus){
   const c=document.createElement("div");c.className="room-card"+(s.name===focus?" focus":"");
   const h=document.createElement("h3");h.textContent=(s.name===focus?"✦ ":"")+s.name;
-  const linked=chores.filter(x=>taskRoom(x).toLowerCase()===s.name.toLowerCase());
+  const linked=chores.filter(x=>x.room_id===s.id||(!x.room_id&&taskRoom(x).toLowerCase()===s.name.toLowerCase()));
   const due=linked.filter(x=>!x.completed&&(!x.due_date||x.due_date<=localDate));
-  const p=document.createElement("p");p.textContent=linked.length+" chore"+(linked.length===1?"":"s")+" · "+due.length+" due";
-  c.append(h,p);
-  if(s.area==="inside"){const b=document.createElement("button");b.type="button";b.className="room-chip";b.textContent=s.name===focus?"Focused":"Make focus";b.addEventListener("click",()=>{manualFocus=s.name;localStorage.setItem("cc_room_focus_v72",s.name);renderRooms();renderLiveDashboard();toast(s.name+" is your focus room.")});c.append(b)}
-  const list=document.createElement("div");list.className="muted";list.style.marginTop="8px";
-  list.textContent=linked.length?linked.map(x=>x.title).join(" · "):"No chores assigned yet.";
-  c.append(list);return c;
+  const p=document.createElement("p");p.textContent=linked.length+" chore"+(linked.length===1?"":"s")+" · "+due.length+" due";c.append(h,p);
+  if(s.area==="inside"){const b=document.createElement("button");b.type="button";b.className="room-chip";b.textContent=s.name===focus?"Focused":"Make focus";b.addEventListener("click",()=>setCloudFocus(s));c.append(b)}
+  const list=document.createElement("div");list.className="muted";list.style.marginTop="8px";list.textContent=linked.length?linked.map(x=>x.title).join(" · "):"No chores assigned yet.";c.append(list);return c;
 }
 function renderRooms(){
-  const focus=rotationFocus(),inside=document.getElementById("insideRoomGrid"),outside=document.getElementById("outsideRoomGrid");
-  inside.innerHTML="";outside.innerHTML="";
-  spaces.forEach(s=>(s.area==="outside"?outside:inside).append(roomCard(s,focus)));
-  renderRoomSuggestions();
+  const focus=rotationFocus(),inside=document.getElementById("insideRoomGrid"),outside=document.getElementById("outsideRoomGrid");inside.innerHTML="";outside.innerHTML="";
+  spaces.filter(s=>s.active!==false).forEach(s=>(s.area==="outside"?outside:inside).append(roomCard(s,focus)));renderRoomSuggestions();
 }
-document.getElementById("choreArea").addEventListener("change",()=>{
-  fillRoomSelect(document.getElementById("choreRoom"),document.getElementById("choreArea").value);
-});
+document.getElementById("choreArea").addEventListener("change",renderRoomSuggestions);
 document.getElementById("editChoreArea").addEventListener("change",()=>fillRoomSelect(document.getElementById("editChoreRoom"),document.getElementById("editChoreArea").value));
-renderRoomSuggestions();
-document.getElementById("addRoomBtn").addEventListener("click",()=>{
+document.getElementById("addRoomBtn").addEventListener("click",async()=>{
   const i=document.getElementById("newRoomName"),area=document.getElementById("newRoomArea").value,name=i.value.trim();if(!name)return;
-  if(!spaces.some(s=>s.name.toLowerCase()===name.toLowerCase()))spaces.push({name,area});
-  i.value="";saveSpaces();toast("Space added.")
+  if(spaces.some(s=>s.name.toLowerCase()===name.toLowerCase())){toast("That space already exists.");return}
+  try{await supabaseRequest("/rest/v1/rooms",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,name,area,sort_order:spaces.length,active:true})});i.value="";await loadSpaces();toast("Space added and synced.")}
+  catch(err){console.error(err);toast("Couldn't add that space.")}
 });
 
 function choreRow(c){
@@ -710,19 +707,24 @@ function renderChores(){
   renderList(document.getElementById("allChoreList"),all,"Nothing here yet.");
   renderRooms();renderDashboardChores();renderLiveDashboard();
 }
+async function migrateLegacyChores(){
+  const legacy=chores.filter(c=>!c.room_id&&taskRoom(c));
+  for(const c of legacy){
+    const roomName=taskRoom(c),area=taskArea(c),room=spaces.find(s=>s.name.toLowerCase()===roomName.toLowerCase());
+    if(!room)continue;
+    try{await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({room_id:room.id,recurrence:taskRepeat(c),area})});c.room_id=room.id;c.recurrence=taskRepeat(c);c.area=area}catch(err){console.error("Legacy chore migration failed",c.id,err)}
+  }
+}
 async function loadChores(){
   try{const data=await supabaseRequest("/rest/v1/tasks?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});chores=Array.isArray(data)?data:[];renderChores()}
   catch(err){console.error(err);toast("Couldn't load your chores.")}
 }
 choreForm.addEventListener("submit",async e=>{
   e.preventDefault();if(!currentUser){toast("Please sign in first.");return}
-  const title=document.getElementById("choreTitle").value.trim(),area=document.getElementById("choreArea").value,room=document.getElementById("choreRoom").value,repeat=document.getElementById("choreRepeat").value,due=document.getElementById("choreDue").value;
-  try{
-    await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=representation","Accept":"application/json"},body:JSON.stringify({user_id:currentUser.id,title,description:taskDescription(room,repeat,area),due_date:due,completed:false,recurring:repeat!=="none"})});
-  }catch(err){console.error("Chore save failed",err);toast("Couldn't save chore: "+(err.message||"unknown error"));return}
-  choreForm.reset();document.getElementById("choreArea").value="inside";fillRoomSelect(document.getElementById("choreRoom"),"inside");
-  choreDue.value=localDate;document.getElementById("choreRepeat").value="weekly";
-  await loadChores();toast("Chore added!");
+  const title=document.getElementById("choreTitle").value.trim(),area=document.getElementById("choreArea").value,roomSelect=document.getElementById("choreRoom"),room=roomSelect.value,room_id=selectedRoomId(roomSelect),repeat=document.getElementById("choreRepeat").value,due=document.getElementById("choreDue").value;
+  try{await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,description:taskDescription(room,repeat,area),due_date:due,completed:false,recurring:repeat!=="none",room_id,recurrence:repeat,area})})}
+  catch(err){console.error("Chore save failed",err);toast("Couldn't save chore: "+(err.message||"unknown error"));return}
+  choreForm.reset();document.getElementById("choreArea").value="inside";fillRoomSelect(document.getElementById("choreRoom"),"inside");choreDue.value=localDate;document.getElementById("choreRepeat").value="weekly";await loadChores();toast("Chore added!");
 });
 document.querySelectorAll("[data-chore-filter]").forEach(b=>b.addEventListener("click",()=>{choreFilter=b.dataset.choreFilter;document.querySelectorAll("[data-chore-filter]").forEach(x=>x.classList.toggle("active",x===b));renderChores()}));
 document.querySelectorAll("[data-hk-tab]").forEach(b=>b.addEventListener("click",()=>{
@@ -741,11 +743,11 @@ function closeChoreEdit(){choreEditModal.classList.remove("open");choreEditModal
 document.getElementById("cancelChoreEdit").addEventListener("click",closeChoreEdit);
 choreEditModal.addEventListener("click",e=>{if(e.target===choreEditModal)closeChoreEdit()});
 document.getElementById("choreEditForm").addEventListener("submit",async e=>{
-  e.preventDefault();const id=document.getElementById("editChoreId").value,title=document.getElementById("editChoreTitle").value.trim(),room=document.getElementById("editChoreRoom").value.trim(),repeat=document.getElementById("editChoreRepeat").value,due=document.getElementById("editChoreDue").value;
+  e.preventDefault();
+  const id=document.getElementById("editChoreId").value,title=document.getElementById("editChoreTitle").value.trim(),area=document.getElementById("editChoreArea").value,roomSelect=document.getElementById("editChoreRoom"),room=roomSelect.value,room_id=selectedRoomId(roomSelect),repeat=document.getElementById("editChoreRepeat").value,due=document.getElementById("editChoreDue").value;
   try{
-    await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description:taskDescription(room,repeat,area),due_date:due,recurring:repeat!=="none"})});
-    const c=chores.find(x=>x.id===id);if(c){c.title=title;c.description=taskDescription(room,repeat,area);c.due_date=due;c.recurring=repeat!=="none"}
-    if(room&&!rooms.some(r=>r.toLowerCase()===room.toLowerCase()))rooms.push(room),saveRooms();closeChoreEdit();renderChores();toast("Chore updated.")
+    await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description:taskDescription(room,repeat,area),due_date:due,recurring:repeat!=="none",room_id,recurrence:repeat,area})});
+    closeChoreEdit();await loadChores();toast("Chore updated.")
   }catch(err){console.error(err);toast("Couldn't save those changes.")}
 });
 function renderDashboardChores(){
@@ -859,7 +861,11 @@ async function startApp(user){
   currentUser=user;
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
-  await Promise.all([loadEvents(),loadGoals(),loadChores()]); renderLiveDashboard();
+  await loadSpaces();
+  await Promise.all([loadEvents(),loadGoals(),loadChores()]);
+  await migrateLegacyChores();
+  await loadHousekeepingSettings();
+  renderChores();renderLiveDashboard();
 }
 
 document.getElementById("signOutBtn").addEventListener("click",()=>{
@@ -878,7 +884,9 @@ async function refreshCloudView(){
   const now=Date.now();
   if(now-ccLastCloudRefresh<5000)return;
   ccLastCloudRefresh=now;
+  await loadSpaces();
   await Promise.all([loadEvents(),loadGoals(),loadChores()]);
+  await loadHousekeepingSettings();
   renderLiveDashboard();
 }
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshCloudView()});
