@@ -159,7 +159,7 @@ input,select,textarea,button{max-width:100%}
 .today-chore span{min-width:0;overflow-wrap:anywhere}
 @media(max-width:650px){.room-grid{grid-template-columns:minmax(0,1fr)}.room-add{flex-direction:column}.cc-modal-card{padding:14px}}
 
-/* v8 live command center */
+/* v8.3 live dashboard — built on last known-good v7.2.2 */
 .command-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
 .command-stat{border:1px solid var(--line);background:#111827;border-radius:14px;padding:12px;min-width:0}
 .command-stat b{display:block;font-size:22px;color:var(--teal)}
@@ -169,14 +169,9 @@ input,select,textarea,button{max-width:100%}
 .live-item:last-child{border-bottom:0}
 .live-date{flex:0 0 48px;text-align:center;border:1px solid var(--line);border-radius:10px;padding:6px 3px;font-size:10px;color:var(--muted)}
 .live-date b{display:block;color:var(--text);font-size:15px}
-.live-copy{min-width:0;overflow-wrap:anywhere}
-.live-copy strong{color:var(--text)}
-.live-copy small{display:block;color:var(--muted);margin-top:2px}
+.live-copy{min-width:0;overflow-wrap:anywhere}.live-copy strong{color:var(--text)}.live-copy small{display:block;color:var(--muted);margin-top:2px}
 .focus-room{font-size:20px;font-weight:900;color:var(--teal);margin:7px 0}
-.goal-progress{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.goal-progress:last-child{border-bottom:0}
-.goal-progress .dot{flex:0 0 auto}
-@media(max-width:650px){.command-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.command-stat{padding:9px}.command-stat b{font-size:18px}}
+@media(max-width:650px){.command-summary{gap:6px}.command-stat{padding:9px}.command-stat b{font-size:18px}}
 </style>
 </head>
 <body>
@@ -206,7 +201,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.2 · Startup fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v8.3 · Safe Live Dashboard</div>
   </div>
 </div>
 
@@ -239,42 +234,15 @@ input,select,textarea,button{max-width:100%}
     </div>
   </div>
   <div class="grid">
-    <div class="card">
-      <h2>Today's chores <span>Live</span></h2>
-      <div id="dashboardChores" class="empty">Loading your chaos…</div>
-      <button class="linkbtn" data-go="housekeeping">Open Housekeeping →</button>
-    </div>
-
-    <div class="card">
-      <h2>Room focus <span>This week's nudge</span></h2>
-      <div id="dashboardRoomFocus" class="focus-room">—</div>
-      <p id="dashboardRoomCopy" class="muted">One area at a time. No whole-house guilt spiral required.</p>
-      <button class="linkbtn" data-go="housekeeping">View rotation →</button>
-    </div>
-
-    <div class="card">
-      <h2>Coming up <span>Calendar</span></h2>
-      <div id="dashboardEvents" class="empty">No upcoming events.</div>
-      <button class="linkbtn" data-go="calendar">Open Calendar →</button>
-    </div>
-
-    <div class="card">
-      <h2>Goals in motion <span>Keep going</span></h2>
-      <div id="dashboardGoals" class="empty">No active goals yet.</div>
-      <button class="linkbtn" data-go="goals">Open Goals →</button>
-    </div>
-
-    <div class="card wide">
-      <h2>Quick access <span>Jump right in</span></h2>
-      <div class="quickgrid">
-        <button class="quick" data-go="housekeeping"><b>🧹</b><small>Chores</small></button>
-        <button class="quick" data-go="calendar"><b>📅</b><small>Calendar</small></button>
-        <button class="quick" data-go="goals"><b>🎯</b><small>Goals</small></button>
-        <button class="quick" data-go="projects"><b>⚒</b><small>Projects</small></button>
-        <button class="quick" data-go="groceries"><b>🛒</b><small>Groceries</small></button>
-        <button class="quick" data-go="finances"><b>＄</b><small>Finances</small></button>
-      </div>
-    </div>
+    <div class="card"><h2>Today's chores <span>Live</span></h2><div id="dashboardChores" class="empty">Loading your chaos…</div><button class="linkbtn" data-go="housekeeping">Open Housekeeping →</button></div>
+    <div class="card"><h2>Room focus <span>This week's nudge</span></h2><div id="dashboardRoomFocus" class="focus-room">—</div><p id="dashboardRoomCopy" class="muted">One area at a time.</p><button class="linkbtn" data-go="housekeeping">View rotation →</button></div>
+    <div class="card"><h2>Coming up <span>Calendar</span></h2><div id="dashboardEvents" class="empty">No upcoming events.</div><button class="linkbtn" data-go="calendar">Open Calendar →</button></div>
+    <div class="card"><h2>Goals in motion <span>Keep going</span></h2><div id="dashboardGoals" class="empty">No active goals yet.</div><button class="linkbtn" data-go="goals">Open Goals →</button></div>
+    <div class="card wide"><h2>Quick access <span>Jump right in</span></h2><div class="quickgrid">
+      <button class="quick" data-go="housekeeping"><b>🧹</b><small>Chores</small></button><button class="quick" data-go="calendar"><b>📅</b><small>Calendar</small></button>
+      <button class="quick" data-go="goals"><b>🎯</b><small>Goals</small></button><button class="quick" data-go="projects"><b>⚒</b><small>Projects</small></button>
+      <button class="quick" data-go="groceries"><b>🛒</b><small>Groceries</small></button><button class="quick" data-go="finances"><b>＄</b><small>Finances</small></button>
+    </div></div>
   </div>
 </section>
   <section class="view" id="housekeeping">
@@ -474,7 +442,6 @@ document.querySelectorAll('.focuscheck').forEach(c=>c.addEventListener('change',
 let currentUser = null;
 let events = [];
 let goals = [];
-let chores = [];
 const eventForm=document.getElementById("eventForm"), goalForm=document.getElementById("goalForm");
 const today=new Date(); const localDate=new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
 document.getElementById("eventDate").value=localDate;
@@ -606,79 +573,8 @@ goalForm.addEventListener("submit",async e=>{
 });
 
 
-
-// ---- Live dashboard (v8) ----
-function dashboardEventDate(e){return e.event_date||""}
-function dashboardEventTime(e){return e.event_time||""}
-function shortMonthDay(date){
-  if(!date)return "—";
-  const d=new Date(date+"T12:00:00");
-  return {mon:d.toLocaleDateString(undefined,{month:"short"}),day:d.getDate()};
-}
-function renderDashboard(){
-  const safeChores=(typeof chores==="undefined"?[]:chores);
-  const safeEvents=(typeof events==="undefined"?[]:events);
-  const safeGoals=(typeof goals==="undefined"?[]:goals);
-  const due=safeChores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate));
-  const futureEvents=safeEvents.filter(e=>dashboardEventDate(e)>=localDate).sort((a,b)=>(dashboardEventDate(a)+dashboardEventTime(a)).localeCompare(dashboardEventDate(b)+dashboardEventTime(b)));
-  const activeGoals=safeGoals.filter(g=>!g.completed);
-
-  const dc=document.getElementById("dashDueCount"),ec=document.getElementById("dashEventCount"),gc=document.getElementById("dashGoalCount");
-  if(dc)dc.textContent=due.length;if(ec)ec.textContent=futureEvents.length;if(gc)gc.textContent=activeGoals.length;
-
-  const msg=document.getElementById("dashboardMessage");
-  if(msg){
-    if(!due.length) msg.textContent="Nothing due today. The goblin approves. ✦";
-    else if(due.length===1) msg.textContent="One chore needs your attention today. The rest can wait.";
-    else msg.textContent=due.length+" chores are due. Pick what matters; perfection is not invited.";
-  }
-
-  const focus=document.getElementById("dashboardRoomFocus");
-  const copy=document.getElementById("dashboardRoomCopy");
-  if(focus){
-    const r=rotationFocus();focus.textContent=r||"No focus room";
-    if(copy&&r){const n=safeChores.filter(c=>taskRoom(c).toLowerCase()===r.toLowerCase()).length;copy.textContent=n?n+" chore"+(n===1?"":"s")+" linked to this area. One room at a time.":"No chores linked here yet. Add some whenever you're ready."}
-  }
-
-  const ev=document.getElementById("dashboardEvents");
-  if(ev){
-    ev.innerHTML="";
-    const show=futureEvents.slice(0,4);
-    if(!show.length){ev.className="empty";ev.textContent="Nothing on the horizon. Suspiciously peaceful. ✦"}
-    else{
-      ev.className="live-list";
-      show.forEach(e=>{
-        const md=shortMonthDay(dashboardEventDate(e));
-        const row=document.createElement("div");row.className="live-item";
-        const date=document.createElement("div");date.className="live-date";date.innerHTML="<span>"+md.mon+"</span><b>"+md.day+"</b>";
-        const cp=document.createElement("div");cp.className="live-copy";
-        const strong=document.createElement("strong");strong.textContent=e.title;
-        const small=document.createElement("small");small.textContent=dashboardEventTime(e)?dashboardEventTime(e).slice(0,5):"All day";
-        cp.append(strong,small);row.append(date,cp);ev.append(row);
-      })
-    }
-  }
-
-  const gl=document.getElementById("dashboardGoals");
-  if(gl){
-    gl.innerHTML="";
-    const show=activeGoals.slice(0,4);
-    if(!show.length){gl.className="empty";gl.textContent="No active goals. Dream up some trouble. ✦"}
-    else{
-      gl.className="live-list";
-      show.forEach(g=>{
-        const row=document.createElement("div");row.className="goal-progress";
-        const dot=document.createElement("span");dot.className="dot";
-        const cp=document.createElement("div");cp.className="live-copy";
-        const strong=document.createElement("strong");strong.textContent=g.title;
-        cp.append(strong);
-        if(g.description){const sm=document.createElement("small");sm.textContent=g.description;cp.append(sm)}
-        row.append(dot,cp);gl.append(row);
-      })
-    }
-  }
-}
 // ---- Housekeeping / recurring chores + rooms (v7.2) ----
+let chores=[];
 let choreFilter="all";
 const defaultRooms=["Laundry area","Guest room / workout room","Kitchen","Downstairs bathroom","Dining room","Living room","Living room closet","Hallway / stairs","Upstairs bathroom","Office","Bedroom"];
 let rooms=JSON.parse(localStorage.getItem("cc_rooms_v72")||"null")||defaultRooms.slice();
@@ -782,7 +678,7 @@ function renderChores(){
   if(choreFilter==="due")all=due; else if(choreFilter==="done")all=all.filter(c=>c.completed);
   all.sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
   renderList(document.getElementById("allChoreList"),all,"Nothing here yet.");
-  renderRooms();renderDashboardChores();renderDashboard();
+  renderRooms();renderDashboardChores();
 }
 async function loadChores(){
   try{const data=await supabaseRequest("/rest/v1/tasks?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});chores=Array.isArray(data)?data:[];renderChores()}
@@ -840,6 +736,28 @@ async function refreshSession(){
 }
 setInterval(()=>{if(currentUser)refreshSession()},45*60*1000);
 
+
+// ---- Live dashboard (v8.3, isolated from startup) ----
+function renderLiveDashboard(){
+  try{
+    const due=chores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate));
+    const future=events.filter(e=>(e.event_date||"")>=localDate).sort((a,b)=>((a.event_date||"")+(a.event_time||"")).localeCompare((b.event_date||"")+(b.event_time||"")));
+    const active=goals.filter(g=>!g.completed);
+    document.getElementById("dashDueCount").textContent=due.length;
+    document.getElementById("dashEventCount").textContent=future.length;
+    document.getElementById("dashGoalCount").textContent=active.length;
+    const msg=document.getElementById("dashboardMessage");
+    msg.textContent=!due.length?"Nothing due today. The goblin approves. ✦":due.length===1?"One chore needs your attention today. The rest can wait.":due.length+" chores are due. Pick what matters; perfection is not invited.";
+    const focus=rotationFocus();
+    document.getElementById("dashboardRoomFocus").textContent=focus||"No focus room";
+    const n=focus?chores.filter(c=>taskRoom(c).toLowerCase()===focus.toLowerCase()).length:0;
+    document.getElementById("dashboardRoomCopy").textContent=focus?(n?n+" chore"+(n===1?"":"s")+" linked to this area. One room at a time.":"No chores linked here yet."):"Add a room when you're ready.";
+    const ev=document.getElementById("dashboardEvents");ev.innerHTML="";
+    if(!future.length){ev.className="empty";ev.textContent="Nothing on the horizon. Suspiciously peaceful. ✦"}else{ev.className="live-list";future.slice(0,4).forEach(e=>{const d=new Date(e.event_date+"T12:00:00"),row=document.createElement("div");row.className="live-item";const date=document.createElement("div");date.className="live-date";const mon=document.createElement("span");mon.textContent=d.toLocaleDateString(undefined,{month:"short"});const day=document.createElement("b");day.textContent=d.getDate();date.append(mon,day);const cp=document.createElement("div");cp.className="live-copy";const st=document.createElement("strong");st.textContent=e.title;const sm=document.createElement("small");sm.textContent=e.event_time?e.event_time.slice(0,5):"All day";cp.append(st,sm);row.append(date,cp);ev.append(row)})}
+    const gl=document.getElementById("dashboardGoals");gl.innerHTML="";
+    if(!active.length){gl.className="empty";gl.textContent="No active goals. Dream up some trouble. ✦"}else{gl.className="live-list";active.slice(0,4).forEach(g=>{const row=document.createElement("div");row.className="live-item";const cp=document.createElement("div");cp.className="live-copy";const st=document.createElement("strong");st.textContent=g.title;cp.append(st);if(g.description){const sm=document.createElement("small");sm.textContent=g.description;cp.append(sm)}row.append(cp);gl.append(row)})}
+  }catch(err){console.error("Dashboard render error",err)}
+}
 const authGate=document.getElementById("authGate");
 const authForm=document.getElementById("authForm");
 const authSubmit=document.getElementById("authSubmit");
@@ -908,7 +826,7 @@ async function startApp(user){
   currentUser=user;
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
-  await Promise.all([loadEvents(),loadGoals(),loadChores()]); renderDashboard();
+  await Promise.all([loadEvents(),loadGoals(),loadChores()]); renderLiveDashboard();
 }
 
 document.getElementById("signOutBtn").addEventListener("click",()=>{
