@@ -205,7 +205,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v10.2 · Project Modal Fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v11 · Project Details & Steps</div>
   </div>
 </div>
 
@@ -428,6 +428,36 @@ input,select,textarea,button{max-width:100%}
       <label class="field" style="grid-column:1/-1">Notes<textarea id="editProjectDescription" rows="3"></textarea></label>
       <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="primary" type="submit">Save changes</button><button id="cancelProjectEdit" type="button">Cancel</button></div>
     </form>
+  </div>
+</div>
+<div class="cc-modal" id="projectDetailModal" aria-hidden="true">
+  <div class="cc-modal-card" style="width:min(720px,100%)">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+      <div>
+        <div class="eyebrow">PROJECT DETAILS</div>
+        <h2 id="projectDetailTitle" style="margin-bottom:4px">Project</h2>
+        <p id="projectDetailMeta" style="margin-top:0"></p>
+      </div>
+      <button id="closeProjectDetail" type="button">Close</button>
+    </div>
+    <p id="projectDetailNotes"></p>
+    <div class="card" style="margin-top:14px;padding:14px">
+      <h2 style="margin-top:0">Progress <span id="projectProgressText">0 of 0 steps</span></h2>
+      <div style="height:10px;background:var(--line);border-radius:999px;overflow:hidden"><div id="projectProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--pink),var(--teal));transition:width .2s ease"></div></div>
+    </div>
+    <div class="card" style="margin-top:14px;padding:14px">
+      <h2 style="margin-top:0">Add a step <span>Break the beast into bites</span></h2>
+      <form id="projectStepForm" class="formgrid">
+        <label class="field">Step<input id="projectStepTitle" required maxlength="140" placeholder="e.g. Remove old trim"></label>
+        <label class="field">Due date <span style="font-weight:400">(optional)</span><input id="projectStepDue" type="date"></label>
+        <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="projectStepNotes" rows="2" placeholder="Measurements, details, reminders..."></textarea></label>
+        <button class="primary" type="submit">＋ Add step</button>
+      </form>
+    </div>
+    <div class="card" style="margin-top:14px;padding:14px">
+      <h2 style="margin-top:0">Project steps <span id="projectStepCount">0 steps</span></h2>
+      <div id="projectStepList" class="empty">No steps yet. Give the goblin something to do. ✦</div>
+    </div>
   </div>
 </div>
 <script>
@@ -867,9 +897,10 @@ function projectRow(p){
   main.append(title,detail);
   if(p.description){const note=document.createElement("small");note.textContent=p.description;main.append(note)}
   const actions=document.createElement("div");actions.className="chore-actions";
+  const open=document.createElement("button");open.type="button";open.textContent="Open";open.addEventListener("click",()=>openProjectDetail(p));
   const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openProjectEdit(p));
-  const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",async()=>{if(!confirm("Remove this project?"))return;try{await supabaseRequest("/rest/v1/projects?id=eq."+encodeURIComponent(p.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadProjects();toast("Project removed.")}catch(err){console.error(err);toast("Couldn't remove that project.")}});
-  actions.append(edit,del);row.append(main,actions);return row;
+  const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",async()=>{if(!confirm("Remove this project?"))return;try{if(activeProject?.id===p.id)closeProjectDetail();await supabaseRequest("/rest/v1/projects?id=eq."+encodeURIComponent(p.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadProjects();toast("Project removed.")}catch(err){console.error(err);toast("Couldn't remove that project.")}});
+  actions.append(open,edit,del);row.append(main,actions);return row;
 }
 function renderProjects(){
   const target=document.getElementById("projectList");let shown=projects.slice();
@@ -893,6 +924,61 @@ projectEditModal.addEventListener("click",e=>{if(e.target===projectEditModal)clo
 document.getElementById("projectEditForm").addEventListener("submit",async e=>{
   e.preventDefault();const id=document.getElementById("editProjectId").value,title=document.getElementById("editProjectTitle").value.trim(),description=document.getElementById("editProjectDescription").value.trim(),status=document.getElementById("editProjectStatus").value,due_date=document.getElementById("editProjectDue").value||null;
   try{await supabaseRequest("/rest/v1/projects?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description,status,due_date})});closeProjectEdit();await loadProjects();toast("Project updated.")}catch(err){console.error(err);toast("Couldn't save that project.")}
+});
+
+
+// ---- Project details & steps (v11) ----
+let activeProject=null,projectSteps=[];
+const projectDetailModal=document.getElementById("projectDetailModal");
+function stepDueLabel(d){return d?" · Due "+prettyDate(d):""}
+function renderProjectDetail(){
+  if(!activeProject)return;
+  document.getElementById("projectDetailTitle").textContent=activeProject.title;
+  document.getElementById("projectDetailMeta").textContent=projectStatusLabel(activeProject.status)+(activeProject.due_date?" · Target "+prettyDate(activeProject.due_date):" · No target date");
+  const notes=document.getElementById("projectDetailNotes");notes.textContent=activeProject.description||"No project notes yet.";notes.style.color=activeProject.description?"":"var(--muted)";
+  const done=projectSteps.filter(s=>s.completed).length,total=projectSteps.length,pct=total?Math.round(done/total*100):0;
+  document.getElementById("projectProgressText").textContent=done+" of "+total+" step"+(total===1?"":"s")+" · "+pct+"%";
+  document.getElementById("projectProgressBar").style.width=pct+"%";
+  document.getElementById("projectStepCount").textContent=total+" step"+(total===1?"":"s");
+  const list=document.getElementById("projectStepList");list.innerHTML="";
+  if(!total){list.className="empty";list.textContent="No steps yet. Give the goblin something to do. ✦";return}
+  list.className="";
+  const ordered=projectSteps.slice().sort((a,b)=>Number(a.completed)-Number(b.completed)||(a.sort_order||0)-(b.sort_order||0)||(a.created_at||"").localeCompare(b.created_at||""));
+  ordered.forEach(s=>{
+    const row=document.createElement("div");row.className="entry";
+    const main=document.createElement("div");main.className="entry-main";
+    const label=document.createElement("label");label.style.cssText="display:flex;gap:10px;align-items:flex-start;cursor:pointer";
+    const box=document.createElement("input");box.type="checkbox";box.checked=!!s.completed;box.style.marginTop="3px";
+    const txt=document.createElement("div"),title=document.createElement("strong");title.textContent=s.title;if(s.completed)title.style.textDecoration="line-through";
+    const meta=document.createElement("small");meta.textContent=(s.completed?"Complete":"To do")+stepDueLabel(s.due_date);
+    txt.append(title,meta);
+    if(s.notes){const note=document.createElement("small");note.textContent=s.notes;txt.append(note)}
+    label.append(box,txt);main.append(label);
+    box.addEventListener("change",async()=>{box.disabled=true;try{await supabaseRequest("/rest/v1/project_steps?id=eq."+encodeURIComponent(s.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({completed:box.checked})});await loadProjectSteps()}catch(err){console.error(err);box.checked=!box.checked;toast("Couldn't update that step.")}finally{box.disabled=false}});
+    const actions=document.createElement("div");actions.className="chore-actions";
+    const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",async()=>{if(!confirm("Remove this project step?"))return;try{await supabaseRequest("/rest/v1/project_steps?id=eq."+encodeURIComponent(s.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadProjectSteps();toast("Step removed.")}catch(err){console.error(err);toast("Couldn't remove that step.")}});
+    actions.append(del);row.append(main,actions);list.append(row);
+  });
+}
+async function loadProjectSteps(){
+  if(!activeProject)return;
+  try{const data=await supabaseRequest("/rest/v1/project_steps?select=*&project_id=eq."+encodeURIComponent(activeProject.id)+"&order=sort_order.asc,created_at.asc",{headers:{"Accept":"application/json"}});projectSteps=Array.isArray(data)?data:[];renderProjectDetail()}
+  catch(err){console.error(err);toast("Couldn't load project steps.")}
+}
+async function openProjectDetail(p){
+  activeProject=p;projectSteps=[];renderProjectDetail();projectDetailModal.classList.add("open");projectDetailModal.setAttribute("aria-hidden","false");await loadProjectSteps();
+}
+function closeProjectDetail(){projectDetailModal.classList.remove("open");projectDetailModal.setAttribute("aria-hidden","true");activeProject=null;projectSteps=[]}
+document.getElementById("closeProjectDetail").addEventListener("click",closeProjectDetail);
+projectDetailModal.addEventListener("click",e=>{if(e.target===projectDetailModal)closeProjectDetail()});
+document.getElementById("projectStepForm").addEventListener("submit",async e=>{
+  e.preventDefault();if(!activeProject)return;
+  const title=document.getElementById("projectStepTitle").value.trim(),notes=document.getElementById("projectStepNotes").value.trim(),due_date=document.getElementById("projectStepDue").value||null;
+  if(!title)return;
+  try{
+    await supabaseRequest("/rest/v1/project_steps",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,project_id:activeProject.id,title,notes,due_date,completed:false,sort_order:projectSteps.length})});
+    document.getElementById("projectStepForm").reset();await loadProjectSteps();toast("Project step added. One bite at a time. ✦");
+  }catch(err){console.error(err);toast("Couldn't add that project step: "+(err.message||"unknown error"))}
 });
 
 // ---- Session refresh (v7.2) ----
