@@ -201,7 +201,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v9.0 · Cloud Housekeeping</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v9.1 · Starter Chore Library</div>
   </div>
 </div>
 
@@ -308,6 +308,10 @@ input,select,textarea,button{max-width:100%}
         <select id="newRoomArea"><option value="inside">🏠 Inside</option><option value="outside">🌿 Outside</option></select>
         <input id="newRoomName" placeholder="Add room or outdoor space">
         <button id="addRoomBtn" class="primary" type="button">＋ Add space</button>
+      </div>
+      <div style="margin-top:16px">
+        <button id="starterChoresBtn" class="primary" type="button">✨ Add starter chore library</button>
+        <p class="muted" style="margin-top:8px">Adds a practical starter set to your rooms and outdoor spaces. Existing chores are left alone, and duplicates are skipped.</p>
       </div>
     </div>
   </div>
@@ -660,6 +664,57 @@ document.getElementById("addRoomBtn").addEventListener("click",async()=>{
   try{await supabaseRequest("/rest/v1/rooms",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,name,area,sort_order:spaces.length,active:true})});i.value="";await loadSpaces();toast("Space added and synced.")}
   catch(err){console.error(err);toast("Couldn't add that space.")}
 });
+
+const starterChores={
+  "Kitchen":[
+    ["Load / unload dishwasher","daily"],["Wipe counters","daily"],["Clean sink","weekly"],["Mop floor","weekly"],
+    ["Clean microwave","monthly"],["Clean refrigerator","monthly"],["Clean oven","quarterly"],["Clean behind appliances","semiannual"]
+  ],
+  "Downstairs bathroom":[["Wipe sink & counter","weekly"],["Clean toilet","weekly"],["Clean mirror","weekly"],["Clean shower / tub","weekly"],["Mop floor","weekly"],["Deep clean bathroom","monthly"]],
+  "Upstairs bathroom":[["Wipe sink & counter","weekly"],["Clean toilet","weekly"],["Clean mirror","weekly"],["Clean shower / tub","weekly"],["Mop floor","weekly"],["Deep clean bathroom","monthly"]],
+  "Living room":[["Tidy surfaces","weekly"],["Dust","weekly"],["Vacuum","weekly"],["Clean windows","monthly"],["Vacuum furniture","monthly"]],
+  "Dining room":[["Clear & wipe table","weekly"],["Dust","weekly"],["Vacuum / sweep","weekly"],["Mop floor","monthly"],["Clean windows","monthly"]],
+  "Bedroom":[["Put clothes away","weekly"],["Change sheets","weekly"],["Dust","weekly"],["Vacuum","weekly"],["Declutter surfaces","monthly"],["Rotate / clean under bed","quarterly"]],
+  "Office":[["Tidy desk","weekly"],["Dust electronics & surfaces","weekly"],["Vacuum","weekly"],["Sort papers","monthly"]],
+  "Laundry area":[["Do laundry","weekly"],["Wipe washer & dryer","monthly"],["Clean lint / laundry area","monthly"],["Deep clean washer","quarterly"]],
+  "Guest room / workout room":[["Tidy room","weekly"],["Dust","monthly"],["Vacuum","weekly"],["Wash guest bedding","quarterly"]],
+  "Living room closet":[["Quick tidy","monthly"],["Declutter closet","quarterly"]],
+  "Hallway / stairs":[["Vacuum / sweep stairs","weekly"],["Dust railings","monthly"],["Mop hard floors","monthly"]],
+  "Yard":[["Cut grass","weekly"],["Pick up yard debris","weekly"],["Edge / trim","biweekly"],["Seasonal yard cleanup","quarterly"]],
+  "Garden":[["Weed garden","weekly"],["Check / water plants","weekly"],["Deadhead & tidy plants","biweekly"],["Seasonal garden cleanup","quarterly"]],
+  "Patio / deck":[["Sweep patio / deck","weekly"],["Tidy outdoor furniture","monthly"],["Wash patio / deck","quarterly"]]
+};
+function nextDueForStarter(repeat){
+  const d=new Date(localDate+"T12:00:00");
+  if(repeat==="daily")d.setDate(d.getDate()+1);
+  else if(repeat==="weekly")d.setDate(d.getDate()+7);
+  else if(repeat==="biweekly")d.setDate(d.getDate()+14);
+  else if(repeat==="monthly")d.setMonth(d.getMonth()+1);
+  else if(repeat==="quarterly")d.setMonth(d.getMonth()+3);
+  else if(repeat==="semiannual")d.setMonth(d.getMonth()+6);
+  else if(repeat==="yearly")d.setFullYear(d.getFullYear()+1);
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+}
+async function addStarterChoreLibrary(){
+  if(!currentUser)return;
+  const btn=document.getElementById("starterChoresBtn");btn.disabled=true;btn.textContent="Adding starter chores…";
+  try{
+    const existing=new Set(chores.map(c=>(taskRoom(c)+"|"+c.title).toLowerCase()));
+    const rows=[];
+    for(const [roomName,items] of Object.entries(starterChores)){
+      const room=spaces.find(s=>s.name.toLowerCase()===roomName.toLowerCase());if(!room)continue;
+      for(const [title,repeat] of items){
+        const key=(room.name+"|"+title).toLowerCase();if(existing.has(key))continue;
+        rows.push({user_id:currentUser.id,title,description:taskDescription(room.name,repeat,room.area),due_date:nextDueForStarter(repeat),completed:false,recurring:repeat!=="none",room_id:room.id,recurrence:repeat,area:room.area});
+      }
+    }
+    if(!rows.length){toast("Your starter library is already in place. ✦");return}
+    await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(rows)});
+    await loadChores();toast(rows.length+" starter chores added. Customize away! ✦");
+  }catch(err){console.error("Starter library failed",err);toast("Couldn't add the starter library: "+(err.message||"unknown error"))}
+  finally{btn.disabled=false;btn.textContent="✨ Add starter chore library"}
+}
+document.getElementById("starterChoresBtn").addEventListener("click",addStarterChoreLibrary);
 
 function choreRow(c){
   const repeat=taskRepeat(c),room=taskRoom(c),today=localDate;
