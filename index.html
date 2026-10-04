@@ -186,6 +186,26 @@ input,select,textarea,button{max-width:100%}
 #savingsList .entry{align-items:flex-start}
 #savingsList .entry-main>strong{font-size:1rem}
 #savingsList .entry-main>small{font-size:.78rem}
+</style><style>
+.calendar-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.calendar-head>button,.calendar-nav-actions button{min-width:42px}
+.calendar-nav-actions{display:flex;gap:8px}
+.month-weekdays,.month-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.month-weekdays{margin-bottom:6px;text-align:center;font-size:.75rem;font-weight:800;opacity:.65}
+.month-day{min-height:88px;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:7px;background:rgba(255,255,255,.025);cursor:pointer;text-align:left;overflow:hidden}
+.month-day:hover{background:rgba(255,255,255,.06)}
+.month-day.other-month{opacity:.32}.month-day.selected{outline:2px solid currentColor}.month-day.today .day-number{font-weight:900;text-decoration:underline}
+.day-number{display:block;font-size:.84rem;margin-bottom:5px}
+.day-event{display:block;font-size:.7rem;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+.day-more{display:block;font-size:.68rem;opacity:.7;margin-top:3px}
+@media(max-width:650px){
+ .month-weekdays,.month-grid{gap:3px}
+ .month-day{min-height:58px;padding:5px}
+ .day-event{display:none}
+ .month-day.has-events::after{content:"•";display:block;font-size:1.2rem;line-height:.7;text-align:center}
+ .month-day.many-events::after{content:"••"}
+ .calendar-head{align-items:flex-start}.calendar-nav-actions{gap:4px}
+}
 </style></head>
 <body>
 
@@ -218,7 +238,7 @@ input,select,textarea,button{max-width:100%}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.3 · Planning Cleanup</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v13.3.1 · Real Calendar</div>
   </div>
 </div>
 
@@ -528,8 +548,17 @@ input,select,textarea,button{max-width:100%}
       </form>
     </div>
     <div class="card">
-      <h2>Upcoming <span id="eventCount">0 events</span></h2>
-      <div id="eventList" class="empty">Your appointments and plans will show up here.</div>
+      <div class="calendar-head">
+        <button id="calendarPrev" type="button" aria-label="Previous month">‹</button>
+        <div><h2 id="calendarMonthLabel" style="margin:0">Month</h2><small id="eventCount">0 total events</small></div>
+        <div class="calendar-nav-actions"><button id="calendarToday" type="button">Today</button><button id="calendarNext" type="button" aria-label="Next month">›</button></div>
+      </div>
+      <div class="month-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+      <div id="monthGrid" class="month-grid"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2 id="selectedDayTitle">Selected day</h2>
+      <div id="eventList" class="empty">Tap a date to see its events.</div>
     </div>
   </section>
   <section class="view" id="goals">
@@ -812,30 +841,56 @@ document.getElementById("eventDate").value=localDate;
 
 function prettyDate(value){if(!value)return "";return new Date(value+"T12:00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"})}
 
-function renderEvents(){
-  const list=document.getElementById("eventList");
-  const today=new Date();today.setHours(0,0,0,0);
-  const through=new Date(today);through.setDate(through.getDate()+30);through.setHours(23,59,59,999);
-  const upcoming=events.filter(e=>{const d=savingsDateOnly(e.event_date);return d&&d>=today&&d<=through})
-    .sort((a,b)=>((a.event_date||"")+(a.event_time||"")).localeCompare((b.event_date||"")+(b.event_time||"")));
-  document.getElementById("eventCount").textContent=upcoming.length+" event"+(upcoming.length===1?"":"s")+" · next 30 days";
+let calendarCursor=new Date();calendarCursor.setDate(1);calendarCursor.setHours(12,0,0,0);
+let selectedCalendarDate=localDate;
+
+function eventDateObj(value){if(!value)return null;const p=value.split("-").map(Number);return new Date(p[0],p[1]-1,p[2],12)}
+function calendarISO(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`}
+function calendarEventsFor(date){return events.filter(e=>e.event_date===date).sort((a,b)=>(a.event_time||"").localeCompare(b.event_time||""))}
+function renderSelectedDay(){
+  const list=document.getElementById("eventList"),dayEvents=calendarEventsFor(selectedCalendarDate);
+  document.getElementById("selectedDayTitle").textContent=prettyDate(selectedCalendarDate);
   list.innerHTML="";
-  if(!upcoming.length){list.className="empty";list.textContent="Nothing coming up in the next 30 days. The goblin approves. ✦";return}
+  if(!dayEvents.length){list.className="empty";list.textContent="Nothing scheduled for this day. ✦";return}
   list.className="";
-  upcoming.forEach(e=>{
+  dayEvents.forEach(e=>{
     const row=document.createElement("div");row.className="entry";
     const main=document.createElement("div");main.className="entry-main";
     const title=document.createElement("strong");title.textContent=e.title;
     const detail=document.createElement("small");
-    detail.textContent=prettyDate(e.event_date)+(e.event_time?" · "+new Date("2000-01-01T"+e.event_time).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):" · Time not set")+(e.location?" · 📍 "+e.location:"");
+    detail.textContent=(e.event_time?new Date("2000-01-01T"+e.event_time).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"Time not set")+(e.location?" · 📍 "+e.location:"");
     main.append(title,detail);
     const actions=document.createElement("div");actions.className="chore-actions";
     const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openEventEdit(e));
     const del=document.createElement("button");del.type="button";del.textContent="Remove";
-    del.addEventListener("click",async()=>{try{await supabaseRequest("/rest/v1/events?id=eq."+encodeURIComponent(e.id),{method:"DELETE"});events=events.filter(x=>x.id!==e.id);renderEvents();toast("Event removed.")}catch(err){console.error(err);toast("Couldn't remove that event.")}});
+    del.addEventListener("click",async()=>{try{await supabaseRequest("/rest/v1/events?id=eq."+encodeURIComponent(e.id),{method:"DELETE"});events=events.filter(x=>x.id!==e.id);renderEvents();renderLiveDashboard();toast("Event removed.")}catch(err){console.error(err);toast("Couldn't remove that event.")}});
     actions.append(edit,del);row.append(main,actions);list.append(row);
   });
 }
+function renderEvents(){
+  document.getElementById("eventCount").textContent=events.length+" total event"+(events.length===1?"":"s");
+  document.getElementById("calendarMonthLabel").textContent=calendarCursor.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+  const grid=document.getElementById("monthGrid");grid.innerHTML="";
+  const first=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth(),1,12);
+  const gridStart=new Date(first);gridStart.setDate(1-first.getDay());
+  for(let i=0;i<42;i++){
+    const d=new Date(gridStart);d.setDate(gridStart.getDate()+i);const iso=calendarISO(d),dayEvents=calendarEventsFor(iso);
+    const cell=document.createElement("button");cell.type="button";cell.className="month-day";
+    if(d.getMonth()!==calendarCursor.getMonth())cell.classList.add("other-month");
+    if(iso===localDate)cell.classList.add("today");if(iso===selectedCalendarDate)cell.classList.add("selected");
+    if(dayEvents.length)cell.classList.add("has-events");if(dayEvents.length>1)cell.classList.add("many-events");
+    const num=document.createElement("span");num.className="day-number";num.textContent=d.getDate();cell.append(num);
+    dayEvents.slice(0,2).forEach(e=>{const ev=document.createElement("span");ev.className="day-event";ev.textContent=(e.event_time?e.event_time.slice(0,5)+" ":"")+e.title;cell.append(ev)});
+    if(dayEvents.length>2){const more=document.createElement("span");more.className="day-more";more.textContent="+"+(dayEvents.length-2)+" more";cell.append(more)}
+    cell.addEventListener("click",()=>{selectedCalendarDate=iso;if(d.getMonth()!==calendarCursor.getMonth()){calendarCursor=new Date(d.getFullYear(),d.getMonth(),1,12)}renderEvents()});
+    grid.append(cell);
+  }
+  renderSelectedDay();
+}
+document.getElementById("calendarPrev").addEventListener("click",()=>{calendarCursor.setMonth(calendarCursor.getMonth()-1);renderEvents()});
+document.getElementById("calendarNext").addEventListener("click",()=>{calendarCursor.setMonth(calendarCursor.getMonth()+1);renderEvents()});
+document.getElementById("calendarToday").addEventListener("click",()=>{const d=new Date();calendarCursor=new Date(d.getFullYear(),d.getMonth(),1,12);selectedCalendarDate=localDate;renderEvents()});
+
 function openEventEdit(e){
   document.getElementById("editEventId").value=e.id;document.getElementById("editEventTitle").value=e.title||"";document.getElementById("editEventDate").value=e.event_date||"";document.getElementById("editEventTime").value=e.event_time||"";document.getElementById("editEventLocation").value=e.location||"";
   const m=document.getElementById("eventEditModal");m.classList.add("open");m.setAttribute("aria-hidden","false");
@@ -846,7 +901,7 @@ document.getElementById("eventEditModal").addEventListener("click",e=>{if(e.targ
 document.getElementById("eventEditForm").addEventListener("submit",async e=>{
   e.preventDefault();const id=document.getElementById("editEventId").value;
   const payload={title:document.getElementById("editEventTitle").value.trim(),event_date:document.getElementById("editEventDate").value,event_time:document.getElementById("editEventTime").value||null,location:document.getElementById("editEventLocation").value.trim()||null};
-  try{await supabaseRequest("/rest/v1/events?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeEventEdit();await loadEvents();toast("Event updated. ✦")}catch(err){console.error(err);toast("Couldn't update that event.")}
+  try{await supabaseRequest("/rest/v1/events?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeEventEdit();await loadEvents();renderLiveDashboard();toast("Event updated. ✦")}catch(err){console.error(err);toast("Couldn't update that event.")}
 });
 
 async function loadEvents(){
@@ -1803,7 +1858,8 @@ setInterval(()=>{if(currentUser)refreshSession()},45*60*1000);
 function renderLiveDashboard(){
   try{
     const due=chores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate));
-    const future=events.filter(e=>(e.event_date||"")>=localDate).sort((a,b)=>((a.event_date||"")+(a.event_time||"")).localeCompare((b.event_date||"")+(b.event_time||"")));
+    const dashToday=new Date();dashToday.setHours(0,0,0,0);const dashThrough=new Date(dashToday);dashThrough.setDate(dashThrough.getDate()+30);dashThrough.setHours(23,59,59,999);
+    const future=events.filter(e=>{const d=eventDateObj(e.event_date);return d&&d>=dashToday&&d<=dashThrough}).sort((a,b)=>((a.event_date||"")+(a.event_time||"")).localeCompare((b.event_date||"")+(b.event_time||"")));
     const active=goals.filter(g=>!g.completed);
     document.getElementById("dashDueCount").textContent=due.length;
     document.getElementById("dashEventCount").textContent=future.length;
@@ -1816,7 +1872,7 @@ function renderLiveDashboard(){
     const focusDue=focus?due.filter(c=>taskRoom(c).toLowerCase()===focus.toLowerCase()).length:0;
     focusCopy.textContent=focus?(focusDue?focusDue+" due chore"+(focusDue===1?"":"s")+" in "+focus+".":"No "+focus+" chores are due today. Other due chores are still listed below."):"Add an indoor room when you're ready.";
     const ev=document.getElementById("dashboardEvents");ev.innerHTML="";
-    if(!future.length){ev.className="empty";ev.textContent="Nothing on the horizon. Suspiciously peaceful. ✦"}else{ev.className="live-list";future.slice(0,4).forEach(e=>{const d=new Date(e.event_date+"T12:00:00"),row=document.createElement("div");row.className="live-item";const date=document.createElement("div");date.className="live-date";const mon=document.createElement("span");mon.textContent=d.toLocaleDateString(undefined,{month:"short"});const day=document.createElement("b");day.textContent=d.getDate();date.append(mon,day);const cp=document.createElement("div");cp.className="live-copy";const st=document.createElement("strong");st.textContent=e.title;const sm=document.createElement("small");sm.textContent=e.event_time?e.event_time.slice(0,5):"All day";cp.append(st,sm);row.append(date,cp);ev.append(row)})}
+    if(!future.length){ev.className="empty";ev.textContent="Nothing coming up in the next 30 days. Suspiciously peaceful. ✦"}else{ev.className="live-list";future.slice(0,4).forEach(e=>{const d=new Date(e.event_date+"T12:00:00"),row=document.createElement("div");row.className="live-item";const date=document.createElement("div");date.className="live-date";const mon=document.createElement("span");mon.textContent=d.toLocaleDateString(undefined,{month:"short"});const day=document.createElement("b");day.textContent=d.getDate();date.append(mon,day);const cp=document.createElement("div");cp.className="live-copy";const st=document.createElement("strong");st.textContent=e.title;const sm=document.createElement("small");sm.textContent=(e.event_time?new Date("2000-01-01T"+e.event_time).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"Time not set")+(e.location?" · "+e.location:"");cp.append(st,sm);row.append(date,cp);ev.append(row)})}
     const gl=document.getElementById("dashboardGoals");gl.innerHTML="";
     if(!active.length){gl.className="empty";gl.textContent="No active goals. Dream up some trouble. ✦"}else{gl.className="live-list";active.slice(0,4).forEach(g=>{const row=document.createElement("div");row.className="live-item";const cp=document.createElement("div");cp.className="live-copy";const st=document.createElement("strong");st.textContent=g.title;cp.append(st);if(g.description){const sm=document.createElement("small");sm.textContent=g.description;cp.append(sm)}row.append(cp);gl.append(row)})}
   }catch(err){console.error("Dashboard render error",err)}
