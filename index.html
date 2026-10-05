@@ -360,7 +360,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.0.2 · Chore Completion Fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.1 · Smarter Debts</div>
   </div>
 </div>
 
@@ -662,6 +662,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <label class="field">Type<select id="debtType"><option>Credit Card</option><option>Personal Loan</option><option>Mortgage</option><option>Auto Loan</option><option>Medical</option><option>Student Loan</option><option selected>Other</option></select></label>
       <label class="field">Due day<input id="debtDueDay" type="number" min="1" max="31" placeholder="1–31"></label>
       <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="debtNotes" rows="2"></textarea></label>
+      <label class="field" style="grid-column:1/-1"><span><input id="debtCreateBill" type="checkbox" style="width:auto;margin-right:8px">Create a matching monthly bill from this debt</span><small>Uses the minimum payment and due day. You can edit either later.</small></label>
       <button class="primary" type="submit">＋ Add debt</button>
     </form>
     <div id="debtList" class="empty" style="margin-top:16px">No debts added. ✦</div>
@@ -906,6 +907,24 @@ body[data-accent="red"]{--pink:#ff5c68}
       <label class="field"><span><input id="editBillAutopay" type="checkbox" style="width:auto;margin-right:8px">Autopay</span></label>
       <label class="field" style="grid-column:1/-1">Notes<textarea id="editBillNotes" rows="2"></textarea></label>
       <div class="cc-modal-actions"><button id="cancelBillEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
+    </form>
+  </div>
+</div>
+<div class="cc-modal" id="debtEditModal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2>Edit debt</h2>
+    <form id="debtEditForm" class="formgrid">
+      <input id="editDebtId" type="hidden">
+      <label class="field">Debt name<input id="editDebtName" required maxlength="120"></label>
+      <label class="field">Current balance<input id="editDebtBalance" required type="number" min="0" step="0.01"></label>
+      <label class="field">Original balance<input id="editDebtOriginal" type="number" min="0" step="0.01"></label>
+      <label class="field">Interest rate %<input id="editDebtRate" type="number" min="0" step="0.01"></label>
+      <label class="field">Minimum payment<input id="editDebtMinimum" type="number" min="0" step="0.01"></label>
+      <label class="field">Type<select id="editDebtType"><option>Credit Card</option><option>Personal Loan</option><option>Mortgage</option><option>Auto Loan</option><option>Medical</option><option>Student Loan</option><option>Other</option></select></label>
+      <label class="field">Due day<input id="editDebtDueDay" type="number" min="1" max="31"></label>
+      <label class="field" style="grid-column:1/-1">Notes<textarea id="editDebtNotes" rows="2"></textarea></label>
+      <label class="field" style="grid-column:1/-1"><span><input id="editDebtSyncBill" type="checkbox" checked style="width:auto;margin-right:8px">Update linked bill name, payment amount, and due day too</span></label>
+      <div class="cc-modal-actions"><button id="cancelDebtEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
     </form>
   </div>
 </div>
@@ -1833,6 +1852,26 @@ async function loadDebts(){
   try{const data=await supabaseRequest("/rest/v1/debts?select=*&order=created_at.asc",{headers:{"Accept":"application/json"}});debts=Array.isArray(data)?data:[];renderDebts()}
   catch(err){console.error(err);toast("Couldn't load debts.")}
 }
+function linkedBillForDebt(debtId){return bills.find(b=>b.linked_debt_id===debtId)}
+function dueDateForDay(day,fromDate=new Date()){
+  const n=Math.max(1,Math.min(31,Number(day)||1)),d=new Date(fromDate);d.setHours(12,0,0,0);
+  let y=d.getFullYear(),m=d.getMonth();
+  const make=(yy,mm)=>{const last=new Date(yy,mm+1,0).getDate();return new Date(yy,mm-1+1,Math.min(n,last),12)};
+  let due=new Date(y,m,Math.min(n,new Date(y,m+1,0).getDate()),12);
+  if(due < new Date(d.getFullYear(),d.getMonth(),d.getDate(),12)) {m++; if(m>11){m=0;y++} due=new Date(y,m,Math.min(n,new Date(y,m+1,0).getDate()),12)}
+  return new Date(due.getTime()-due.getTimezoneOffset()*60000).toISOString().slice(0,10);
+}
+async function createBillForDebt(d){
+  if(linkedBillForDebt(d.id)){toast("That debt already has a linked bill. ✦");return}
+  if(!(Number(d.minimum_payment)>0)||!d.due_day){toast("Add a minimum payment and due day first, then I can make the bill.");return}
+  const payload={user_id:currentUser.id,name:d.name,amount:Number(d.minimum_payment),due_date:dueDateForDay(d.due_day),paid:false,recurring:true,recurrence:"monthly",category:"Debt",autopay:false,notes:"Created from linked debt.",linked_debt_id:d.id,updated_at:new Date().toISOString()};
+  await supabaseRequest("/rest/v1/bills",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});
+  await loadBills();renderDebts();toast("Linked bill created. One less thing to enter twice. ✦");
+}
+function openDebtEdit(d){
+  document.getElementById("editDebtId").value=d.id;document.getElementById("editDebtName").value=d.name||"";document.getElementById("editDebtBalance").value=d.balance??0;document.getElementById("editDebtOriginal").value=d.original_balance??"";document.getElementById("editDebtRate").value=d.interest_rate??"";document.getElementById("editDebtMinimum").value=d.minimum_payment??"";document.getElementById("editDebtType").value=d.debt_type||"Other";document.getElementById("editDebtDueDay").value=d.due_day??"";document.getElementById("editDebtNotes").value=d.notes||"";document.getElementById("editDebtSyncBill").checked=!!linkedBillForDebt(d.id);document.getElementById("editDebtSyncBill").disabled=!linkedBillForDebt(d.id);document.getElementById("debtEditModal").classList.add("open");document.getElementById("debtEditModal").setAttribute("aria-hidden","false")
+}
+function closeDebtEdit(){document.getElementById("debtEditModal").classList.remove("open");document.getElementById("debtEditModal").setAttribute("aria-hidden","true")}
 function renderDebts(){
   const total=debts.reduce((s,d)=>s+Number(d.balance||0),0);
   const original=debts.reduce((s,d)=>s+Number(d.original_balance||d.balance||0),0);
@@ -1857,16 +1896,39 @@ function renderDebts(){
     if(d.notes){const n=document.createElement("small");n.textContent=d.notes;main.append(n)}
     const actions=document.createElement("div");actions.className="chore-actions";
     const pay=document.createElement("button");pay.type="button";pay.textContent="Make Payment";pay.addEventListener("click",()=>openMoneyAdjust("debt",d.id,"subtract","Make a debt payment","Payment amount"));
+    const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openDebtEdit(d));
+    const linked=linkedBillForDebt(d.id);const link=document.createElement("button");link.type="button";link.textContent=linked?"Linked Bill ✓":"Create Linked Bill";link.disabled=!!linked;link.addEventListener("click",async()=>{try{await createBillForDebt(d)}catch(err){console.error(err);toast("Couldn't create the linked bill: "+(err.message||"unknown error"))}});
     const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeDebt(d));
-    actions.append(pay,del);row.append(main,actions);list.append(row);
+    actions.append(pay,edit,link,del);row.append(main,actions);list.append(row);
   });
   refreshDebtSelectors();
 }
 document.getElementById("debtForm").addEventListener("submit",async e=>{
   e.preventDefault();
-  const balance=Number(document.getElementById("debtBalance").value),origRaw=document.getElementById("debtOriginal").value;
+  const balance=Number(document.getElementById("debtBalance").value),origRaw=document.getElementById("debtOriginal").value,makeBill=document.getElementById("debtCreateBill").checked;
   const payload={user_id:currentUser.id,name:document.getElementById("debtName").value.trim(),balance,original_balance:origRaw===""?balance:Number(origRaw),interest_rate:document.getElementById("debtRate").value===""?null:Number(document.getElementById("debtRate").value),minimum_payment:document.getElementById("debtMinimum").value===""?null:Number(document.getElementById("debtMinimum").value),debt_type:document.getElementById("debtType").value,due_day:document.getElementById("debtDueDay").value===""?null:Number(document.getElementById("debtDueDay").value),notes:document.getElementById("debtNotes").value.trim(),updated_at:new Date().toISOString()};
-  try{await supabaseRequest("/rest/v1/debts",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});e.target.reset();document.getElementById("debtType").value="Other";await loadDebts();toast("Debt added. Time to make that number smaller. ✦")}catch(err){console.error(err);toast("Couldn't add that debt.")}
+  if(makeBill&&(!(payload.minimum_payment>0)||!payload.due_day)){toast("To create the matching bill, add a minimum payment and due day.");return}
+  try{
+    const created=await supabaseRequest("/rest/v1/debts",{method:"POST",headers:{"Prefer":"return=representation"},body:JSON.stringify(payload)});
+    const debt=Array.isArray(created)?created[0]:created;
+    if(makeBill&&debt)await supabaseRequest("/rest/v1/bills",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,name:debt.name,amount:Number(debt.minimum_payment),due_date:dueDateForDay(debt.due_day),paid:false,recurring:true,recurrence:"monthly",category:"Debt",autopay:false,notes:"Created from linked debt.",linked_debt_id:debt.id,updated_at:new Date().toISOString()})});
+    e.target.reset();document.getElementById("debtType").value="Other";await Promise.all([loadDebts(),loadBills()]);toast(makeBill?"Debt + matching bill added. Goblin duplication eliminated. ✦":"Debt added. Time to make that number smaller. ✦")
+  }catch(err){console.error(err);toast("Couldn't add that debt: "+(err.message||"unknown error"))}
+});
+document.getElementById("cancelDebtEdit").addEventListener("click",closeDebtEdit);
+document.getElementById("debtEditModal").addEventListener("click",e=>{if(e.target.id==="debtEditModal")closeDebtEdit()});
+document.getElementById("debtEditForm").addEventListener("submit",async e=>{
+  e.preventDefault();const id=document.getElementById("editDebtId").value,d=debts.find(x=>x.id===id);if(!d)return;
+  const minRaw=document.getElementById("editDebtMinimum").value,dueRaw=document.getElementById("editDebtDueDay").value,origRaw=document.getElementById("editDebtOriginal").value,rateRaw=document.getElementById("editDebtRate").value;
+  const payload={name:document.getElementById("editDebtName").value.trim(),balance:Number(document.getElementById("editDebtBalance").value),original_balance:origRaw===""?null:Number(origRaw),interest_rate:rateRaw===""?null:Number(rateRaw),minimum_payment:minRaw===""?null:Number(minRaw),debt_type:document.getElementById("editDebtType").value,due_day:dueRaw===""?null:Number(dueRaw),notes:document.getElementById("editDebtNotes").value.trim(),updated_at:new Date().toISOString()};
+  try{
+    await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});
+    const linked=linkedBillForDebt(id);
+    if(linked&&document.getElementById("editDebtSyncBill").checked&&payload.minimum_payment>0&&payload.due_day){
+      await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(linked.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({name:payload.name,amount:payload.minimum_payment,due_date:dueDateForDay(payload.due_day),category:"Debt",updated_at:new Date().toISOString()})});
+    }
+    closeDebtEdit();await Promise.all([loadDebts(),loadBills()]);toast("Debt updated. Future You has better records. ✦")
+  }catch(err){console.error(err);toast("Couldn't update that debt: "+(err.message||"unknown error"))}
 });
 async function removeDebt(d){if(!confirm("Remove "+d.name+"?"))return;try{await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(d.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadDebts();toast("Debt removed.")}catch(err){console.error(err);toast("Couldn't remove that debt.")}}
 
