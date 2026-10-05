@@ -328,6 +328,13 @@ body[data-accent="red"]{--pink:#ff5c68}
     text-align:center;
   }
 }
+</style><style>
+#debtEditModal .cc-modal-card{width:min(760px,calc(100vw - 32px));max-width:760px}
+#debtEditModal .formgrid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+#debtEditModal .field{min-width:0}
+#debtEditModal .field input,#debtEditModal .field select,#debtEditModal .field textarea{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+#debtEditModal .cc-modal-actions{grid-column:1/-1}
+@media(max-width:650px){#debtEditModal .formgrid{grid-template-columns:minmax(0,1fr)}#debtEditModal .cc-modal-actions{grid-column:auto}}
 </style></head>
 <body>
 
@@ -360,7 +367,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.1 · Smarter Debts</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.1.1 · Debt Layout & Progress Fix</div>
   </div>
 </div>
 
@@ -1882,7 +1889,7 @@ function renderDebts(){
   if(!debts.length){list.className="empty";list.textContent="No debts added. ✦";refreshDebtSelectors();return}
   list.className="";
   debts.forEach(d=>{
-    const orig=Number(d.original_balance||d.balance||0),bal=Number(d.balance||0),paid=Math.max(0,orig-bal),percent=orig?Math.round((paid/orig)*100):0;
+    const bal=Number(d.balance||0),storedOrig=Number(d.original_balance||0),orig=storedOrig>0?storedOrig:bal,paid=Math.max(0,orig-bal),percent=orig>0?Math.max(0,Math.min(100,Math.round((paid/orig)*100))):0;
     const row=document.createElement("div");row.className="entry";
     const main=document.createElement("div");main.className="entry-main";
     const title=document.createElement("strong");title.textContent=d.name+" · "+money(bal)+" remaining";
@@ -1906,7 +1913,9 @@ function renderDebts(){
 document.getElementById("debtForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const balance=Number(document.getElementById("debtBalance").value),origRaw=document.getElementById("debtOriginal").value,makeBill=document.getElementById("debtCreateBill").checked;
-  const payload={user_id:currentUser.id,name:document.getElementById("debtName").value.trim(),balance,original_balance:origRaw===""?balance:Number(origRaw),interest_rate:document.getElementById("debtRate").value===""?null:Number(document.getElementById("debtRate").value),minimum_payment:document.getElementById("debtMinimum").value===""?null:Number(document.getElementById("debtMinimum").value),debt_type:document.getElementById("debtType").value,due_day:document.getElementById("debtDueDay").value===""?null:Number(document.getElementById("debtDueDay").value),notes:document.getElementById("debtNotes").value.trim(),updated_at:new Date().toISOString()};
+  const originalEntered=origRaw===""?balance:Number(origRaw);
+  const originalBalance=Number.isFinite(originalEntered)&&originalEntered>=balance?originalEntered:balance;
+  const payload={user_id:currentUser.id,name:document.getElementById("debtName").value.trim(),balance,original_balance:originalBalance,interest_rate:document.getElementById("debtRate").value===""?null:Number(document.getElementById("debtRate").value),minimum_payment:document.getElementById("debtMinimum").value===""?null:Number(document.getElementById("debtMinimum").value),debt_type:document.getElementById("debtType").value,due_day:document.getElementById("debtDueDay").value===""?null:Number(document.getElementById("debtDueDay").value),notes:document.getElementById("debtNotes").value.trim(),updated_at:new Date().toISOString()};
   if(makeBill&&(!(payload.minimum_payment>0)||!payload.due_day)){toast("To create the matching bill, add a minimum payment and due day.");return}
   try{
     const created=await supabaseRequest("/rest/v1/debts",{method:"POST",headers:{"Prefer":"return=representation"},body:JSON.stringify(payload)});
@@ -1920,7 +1929,10 @@ document.getElementById("debtEditModal").addEventListener("click",e=>{if(e.targe
 document.getElementById("debtEditForm").addEventListener("submit",async e=>{
   e.preventDefault();const id=document.getElementById("editDebtId").value,d=debts.find(x=>x.id===id);if(!d)return;
   const minRaw=document.getElementById("editDebtMinimum").value,dueRaw=document.getElementById("editDebtDueDay").value,origRaw=document.getElementById("editDebtOriginal").value,rateRaw=document.getElementById("editDebtRate").value;
-  const payload={name:document.getElementById("editDebtName").value.trim(),balance:Number(document.getElementById("editDebtBalance").value),original_balance:origRaw===""?null:Number(origRaw),interest_rate:rateRaw===""?null:Number(rateRaw),minimum_payment:minRaw===""?null:Number(minRaw),debt_type:document.getElementById("editDebtType").value,due_day:dueRaw===""?null:Number(dueRaw),notes:document.getElementById("editDebtNotes").value.trim(),updated_at:new Date().toISOString()};
+  const editedBalance=Number(document.getElementById("editDebtBalance").value);
+  const editedOriginalRaw=origRaw===""?editedBalance:Number(origRaw);
+  const editedOriginal=Number.isFinite(editedOriginalRaw)&&editedOriginalRaw>=editedBalance?editedOriginalRaw:editedBalance;
+  const payload={name:document.getElementById("editDebtName").value.trim(),balance:editedBalance,original_balance:editedOriginal,interest_rate:rateRaw===""?null:Number(rateRaw),minimum_payment:minRaw===""?null:Number(minRaw),debt_type:document.getElementById("editDebtType").value,due_day:dueRaw===""?null:Number(dueRaw),notes:document.getElementById("editDebtNotes").value.trim(),updated_at:new Date().toISOString()};
   try{
     await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});
     const linked=linkedBillForDebt(id);
