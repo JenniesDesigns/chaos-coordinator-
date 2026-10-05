@@ -360,7 +360,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.0.1 · Mobile Toast Fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.0.2 · Chore Completion Fix</div>
   </div>
 </div>
 
@@ -451,7 +451,7 @@ body[data-accent="red"]{--pink:#ff5c68}
         <label class="field">Room / space<select id="choreRoom" required></select></label>
         <label class="field">Repeat
           <select id="choreRepeat">
-            <option value="none">One time</option><option value="daily">Daily</option><option value="weekly" selected>Weekly</option>
+            <option value="none">One time</option><option value="daily">Daily</option><option value="every_other_day">Every other day</option><option value="weekly" selected>Weekly</option>
             <option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option><option value="quarterly">Every 3 months</option>
             <option value="semiannual">Twice a year</option><option value="yearly">Yearly</option>
           </select>
@@ -819,7 +819,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <label class="field">Area<select id="editChoreArea"><option value="inside">🏠 Inside</option><option value="outside">🌿 Outside</option></select></label>
       <label class="field">Room / space<select id="editChoreRoom"></select></label>
       <label class="field">Repeat<select id="editChoreRepeat">
-        <option value="none">One time</option><option value="daily">Daily</option><option value="weekly">Weekly</option>
+        <option value="none">One time</option><option value="daily">Daily</option><option value="every_other_day">Every other day</option><option value="weekly">Weekly</option>
         <option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option><option value="quarterly">Every 3 months</option>
         <option value="semiannual">Twice a year</option><option value="yearly">Yearly</option>
       </select></label>
@@ -1235,7 +1235,7 @@ function roomById(id){return spaces.find(s=>s.id===id)}
 function taskRoom(c){const linked=roomById(c.room_id);if(linked)return linked.name;const m=(c.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
 function taskArea(c){const linked=roomById(c.room_id);if(linked)return linked.area;if(c.area)return c.area;const m=(c.description||"").match(/\[CC_AREA:([^\]]+)\]/);return m?m[1]:"inside"}
 function taskDescription(room,repeat,area="inside"){return `[CC_ROOM:${room}] [CC_REPEAT:${repeat}] [CC_AREA:${area}]`}
-function recurrenceLabel(value){return ({none:"One time",daily:"Daily",weekly:"Weekly",biweekly:"Every 2 weeks",monthly:"Monthly",quarterly:"Every 3 months",semiannual:"Twice a year",yearly:"Yearly"})[value]||"One time"}
+function recurrenceLabel(value){return ({none:"One time",daily:"Daily",every_other_day:"Every other day",weekly:"Weekly",biweekly:"Every 2 weeks",monthly:"Monthly",quarterly:"Every 3 months",semiannual:"Twice a year",yearly:"Yearly"})[value]||"One time"}
 function rotationFocus(){const r=roomById(housekeepingSettings?.focus_room_id);return r?.name||""}
 function fillRoomSelect(select,area,value=""){
   const choices=spaces.filter(s=>s.area===area&&s.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)||a.name.localeCompare(b.name));
@@ -1312,9 +1312,22 @@ const starterChores={
   "Garden":[["Weed garden","weekly"],["Check / water plants","weekly"],["Deadhead & tidy plants","biweekly"],["Seasonal garden cleanup","quarterly"]],
   "Patio / deck":[["Sweep patio / deck","weekly"],["Tidy outdoor furniture","monthly"],["Wash patio / deck","quarterly"]]
 };
+function nextDue(dateStr,repeat){
+  const d=new Date((dateStr||localDate)+"T12:00:00");
+  if(repeat==="daily")d.setDate(d.getDate()+1);
+  else if(repeat==="every_other_day")d.setDate(d.getDate()+2);
+  else if(repeat==="weekly")d.setDate(d.getDate()+7);
+  else if(repeat==="biweekly")d.setDate(d.getDate()+14);
+  else if(repeat==="monthly")d.setMonth(d.getMonth()+1);
+  else if(repeat==="quarterly")d.setMonth(d.getMonth()+3);
+  else if(repeat==="semiannual")d.setMonth(d.getMonth()+6);
+  else if(repeat==="yearly")d.setFullYear(d.getFullYear()+1);
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+}
 function nextDueForStarter(repeat){
   const d=new Date(localDate+"T12:00:00");
   if(repeat==="daily")d.setDate(d.getDate()+1);
+  else if(repeat==="every_other_day")d.setDate(d.getDate()+2);
   else if(repeat==="weekly")d.setDate(d.getDate()+7);
   else if(repeat==="biweekly")d.setDate(d.getDate()+14);
   else if(repeat==="monthly")d.setMonth(d.getMonth()+1);
