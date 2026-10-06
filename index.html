@@ -367,7 +367,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.1.2 · Honest Debt Progress</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.2 · Printable Grocery List</div>
   </div>
 </div>
 
@@ -556,11 +556,14 @@ body[data-accent="red"]{--pink:#ff5c68}
 
   <div class="card">
     <h2>Food & groceries <span id="foodCount">0 items</span></h2>
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
     <div class="chore-filter" id="foodTabs">
       <button type="button" class="active" data-food-tab="grocery">🛒 Grocery List</button>
       <button type="button" data-food-tab="pantry">🥫 Pantry</button>
       <button type="button" data-food-tab="fridge">🧊 Fridge</button>
       <button type="button" data-food-tab="freezer">❄️ Freezer</button>
+    </div>
+      <button id="printGroceryList" type="button">🖨️ Print Grocery List</button>
     </div>
     <div id="foodList" class="empty">Your grocery list is gloriously empty. ✦</div>
   </div>
@@ -1721,6 +1724,34 @@ function renderFood(){
     row.append(main,actions);list.append(row);
   });
 }
+function printGroceryList(){
+  const items=foodItems.filter(groceryNeeded).slice().sort((a,b)=>(a.item||"").localeCompare(b.item||""));
+  if(!items.length){toast("Nothing to print. Grocery goblin has an empty cart. ✦");return}
+  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const rows=items.map(i=>`<li><span class="box"></span><span><strong>${esc(i.item)}</strong>${i.quantity?` <span class="qty">· ${esc(i.quantity)}</span>`:""}</span></li>`).join("");
+  const w=window.open("","_blank","width=760,height=900");
+  if(!w){toast("Your browser blocked the print window. Allow pop-ups for Chaos Coordinator and try again.");return}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Chaos Coordinator Grocery List</title><style>
+    @page{margin:.55in}
+    *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff;margin:0;font-size:16px}
+    header{border-bottom:3px solid #111;padding-bottom:12px;margin-bottom:18px}
+    h1{font-size:25px;margin:0 0 5px}.tag{font-size:12px;letter-spacing:1.5px;text-transform:uppercase}
+    ul{list-style:none;padding:0;margin:0}li{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid #bbb;break-inside:avoid}
+    .box{width:19px;height:19px;border:2px solid #111;display:inline-block;flex:0 0 19px;margin-top:1px}
+    .qty{font-weight:normal}footer{margin-top:22px;font-size:13px;font-weight:bold}
+    .no-print{margin:0 0 18px;text-align:right}.no-print button{font-size:15px;padding:9px 14px}
+    @media print{.no-print{display:none}}
+  </style></head><body>
+  <div class="no-print"><button onclick="window.print()">🖨️ Print</button></div>
+  <header><div class="tag">Chaos Coordinator ✦</div><h1>Grocery List</h1></header>
+  <ul>${rows}</ul>
+  <footer>${items.length} thing${items.length===1?"":"s"} to acquire. Go forth. 🛒</footer>
+  <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),150));<\/script>
+  </body></html>`);
+  w.document.close();
+}
+document.getElementById("printGroceryList").addEventListener("click",printGroceryList);
+
 async function loadFood(){
   try{const data=await supabaseRequest("/rest/v1/groceries?select=*&order=created_at.desc",{headers:{"Accept":"application/json"}});foodItems=Array.isArray(data)?data:[];renderFood()}
   catch(err){console.error(err);toast("Couldn't load food & groceries.")}
