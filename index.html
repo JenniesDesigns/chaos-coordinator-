@@ -367,7 +367,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.1.1 · Debt Layout & Progress Fix</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.1.2 · Honest Debt Progress</div>
   </div>
 </div>
 
@@ -1889,7 +1889,7 @@ function renderDebts(){
   if(!debts.length){list.className="empty";list.textContent="No debts added. ✦";refreshDebtSelectors();return}
   list.className="";
   debts.forEach(d=>{
-    const bal=Number(d.balance||0),storedOrig=Number(d.original_balance||0),orig=storedOrig>0?storedOrig:bal,paid=Math.max(0,orig-bal),percent=orig>0?Math.max(0,Math.min(100,Math.round((paid/orig)*100))):0;
+    const bal=Number(d.balance||0),storedOrig=Number(d.original_balance||0),orig=storedOrig>0?storedOrig:bal,paid=Math.max(0,orig-bal),rawPercent=orig>0?Math.round((paid/orig)*100):0,percent=bal<=0?100:Math.max(0,Math.min(99,rawPercent));
     const row=document.createElement("div");row.className="entry";
     const main=document.createElement("div");main.className="entry-main";
     const title=document.createElement("strong");title.textContent=d.name+" · "+money(bal)+" remaining";
