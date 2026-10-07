@@ -354,6 +354,15 @@ body[data-accent="red"]{--pink:#ff5c68}
 .finance-card>.cc-finance-body{padding:0 17px 17px}
 .finance-card{margin-bottom:16px;background:linear-gradient(145deg,var(--panel),#111827);box-shadow:var(--shadow)}
 @media(max-width:650px){.cc-group>summary{padding:10px}.cc-group-body{padding:0 10px 7px}.finance-card>summary{font-size:16px;padding:14px}.finance-card>.cc-finance-body{padding:0 14px 14px}}
+</style><style>
+.meal-mobile-toggle{display:none}
+@media(max-width:650px){
+  .meal-mobile-toggle{display:flex;width:100%;align-items:center;justify-content:space-between;text-align:left;background:transparent;border:0;padding:0;color:var(--text);font:inherit;font-size:18px;font-weight:800}
+  .meal-mobile-toggle .meal-toggle-arrow{color:var(--teal);transition:transform .15s ease}
+  .meal-mobile-toggle[aria-expanded="true"] .meal-toggle-arrow{transform:rotate(180deg)}
+  .meal-plan-body{display:none;padding-top:12px}
+  .meal-plan-card.meal-open .meal-plan-body{display:block}
+}
 </style></head>
 <body>
 
@@ -386,7 +395,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.4 · Organize the Chaos</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.4.2 · Tidy Little Doors</div>
   </div>
 </div>
 
@@ -570,13 +579,18 @@ body[data-accent="red"]{--pink:#ff5c68}
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:16px">
+  <div class="card meal-plan-card" style="margin-bottom:16px">
+    <button type="button" class="meal-mobile-toggle" id="mealMobileToggle" aria-expanded="false">
+      <span>🍴 Weekly Meal Planning</span><span class="meal-toggle-arrow">▾</span>
+    </button>
+    <div class="meal-plan-body" id="mealPlanBody">
     <div class="meal-plan-head">
       <div><div class="eyebrow">WEEKLY MEAL PLAN</div><h2 id="mealWeekLabel" style="margin:4px 0 0">This week</h2></div>
       <div class="meal-week-nav"><button id="mealPrevWeek" type="button">‹</button><button id="mealThisWeek" type="button">This week</button><button id="mealNextWeek" type="button">›</button></div>
     </div>
     <p class="muted" style="margin-top:8px">Plan dinner. Leave a day blank. Order pizza. No meal-planning police live here.</p>
     <div id="mealPlanGrid" class="meal-plan-grid"></div>
+  </div>
   </div>
 
   <div class="card">
@@ -647,9 +661,9 @@ body[data-accent="red"]{--pink:#ff5c68}
       <div id="paydaySavingsList" class="empty" style="margin-bottom:12px">No paycheck savings planned yet. ✦</div>
       <div id="paydayBillList" class="empty">Nothing due before payday. The money goblin approves. ✦</div>
     </div>
-  </div></div></details>
+  </div></details>
 
-  <details class="cc-group finance-card" open><summary>🛒 Other Spending <span>Money spent this pay period</span></summary><div class="cc-finance-body">
+  <details class="cc-group finance-card"><summary>🛒 Other Spending <span>Money spent this pay period</span></summary><div class="cc-finance-body">
     <form id="spendingForm" class="formgrid">
       <label class="field">What was it?<input id="spendingDescription" required maxlength="120" placeholder="e.g. Groceries"></label>
       <label class="field">Amount<input id="spendingAmount" required type="number" min="0.01" step="0.01" placeholder="0.00"></label>
@@ -660,7 +674,7 @@ body[data-accent="red"]{--pink:#ff5c68}
     </form>
     <div id="spendingPeriodLabel" class="muted" style="margin:14px 0 4px"></div>
     <div id="spendingList" class="empty">No other spending recorded for this pay period. ✦</div>
-  </div></div></details>
+  </div></details>
 
   <div class="stats" style="margin-bottom:16px">
     <div class="stat"><span>Due this month</span><strong id="billMonthTotal">$0.00</strong></div>
@@ -668,7 +682,7 @@ body[data-accent="red"]{--pink:#ff5c68}
     <div class="stat"><span>Bills remaining</span><strong id="billRemainingCount">0</strong></div>
   </div>
 
-  <details class="cc-group finance-card" open><summary>Add a bill <span>Recurring or one-time</span></summary><div class="cc-finance-body">
+  <details class="cc-group finance-card"><summary>Add a bill <span>Recurring or one-time</span></summary><div class="cc-finance-body">
     <form id="billForm" class="formgrid">
       <label class="field">Bill name<input id="billName" required maxlength="120" placeholder="e.g. Electric"></label>
       <label class="field">Amount<input id="billAmount" required type="number" min="0" step="0.01" placeholder="0.00"></label>
@@ -680,16 +694,16 @@ body[data-accent="red"]{--pink:#ff5c68}
       <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="billNotes" rows="2"></textarea></label>
       <button class="primary" type="submit">＋ Add bill</button>
     </form>
-  </div></div></details>
+  </div></details>
 
-  <details class="cc-group finance-card" open><summary>Bills <span id="billCount">0 bills</span></summary><div class="cc-finance-body">
+  <details class="cc-group finance-card"><summary>Bills <span id="billCount">0 bills</span></summary><div class="cc-finance-body">
     <div class="chore-filter">
       <button type="button" class="active" data-bill-filter="upcoming">Upcoming</button>
       <button type="button" data-bill-filter="all">All</button>
       <button type="button" data-bill-filter="autopay">Autopay</button>
     </div>
     <div id="billList" class="empty">No bills yet. A suspiciously peaceful financial situation. ✦</div>
-  </div></div></details>
+  </div></details>
 
   <div class="stats" style="margin:16px 0">
     <div class="stat"><span>Total debt</span><strong id="debtTotal">$0.00</strong></div>
@@ -697,7 +711,7 @@ body[data-accent="red"]{--pink:#ff5c68}
     <div class="stat"><span>Total savings</span><strong id="savingsTotal">$0.00</strong></div>
   </div>
 
-  <details class="cc-group finance-card" open><summary>Debts <span id="debtCount">0 debts</span></summary><div class="cc-finance-body">
+  <details class="cc-group finance-card"><summary>Debts <span id="debtCount">0 debts</span></summary><div class="cc-finance-body">
     <form id="debtForm" class="formgrid">
       <label class="field">Debt name<input id="debtName" required maxlength="120" placeholder="e.g. Credit card"></label>
       <label class="field">Current balance<input id="debtBalance" required type="number" min="0" step="0.01" placeholder="0.00"></label>
@@ -711,9 +725,9 @@ body[data-accent="red"]{--pink:#ff5c68}
       <button class="primary" type="submit">＋ Add debt</button>
     </form>
     <div id="debtList" class="empty" style="margin-top:16px">No debts added. ✦</div>
-  </div></div></details>
+  </div></details>
 
-  <details class="cc-group finance-card" open><summary>Savings Goals <span id="savingsCount">0 goals</span></summary><div class="cc-finance-body">
+  <details class="cc-group finance-card"><summary>Savings Goals <span id="savingsCount">0 goals</span></summary><div class="cc-finance-body">
     <form id="savingsForm" class="formgrid">
       <label class="field">Goal name<input id="savingsName" required maxlength="120" placeholder="e.g. Retirement House"></label>
       <label class="field">Target amount<input id="savingsTarget" required type="number" min="0" step="0.01" placeholder="0.00"></label>
@@ -724,7 +738,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <button class="primary" type="submit">＋ Add savings goal</button>
     </form>
     <div id="savingsList" class="empty" style="margin-top:16px">No savings goals yet. Dream fund awaiting instructions. ✦</div>
-  </div></div></details>
+  </div></details>
 </section>
   <section class="view" id="calendar">
     <div class="card" style="margin-bottom:16px">
@@ -1470,7 +1484,7 @@ function renderList(el,items,empty){
   el.className="";const groups=new Map();
   items.forEach(c=>{const room=taskRoom(c)||"General",area=taskArea(c)||"inside",key=area+"|||"+room;if(!groups.has(key))groups.set(key,{room,area,items:[]});groups.get(key).items.push(c)});
   [...groups.values()].sort((a,b)=>(a.area===b.area?a.room.localeCompare(b.room):a.area.localeCompare(b.area))).forEach(g=>{
-    const details=document.createElement("details");details.className="cc-group";details.open=true;
+    const details=document.createElement("details");details.className="cc-group";
     const summary=document.createElement("summary"),name=document.createElement("span"),count=document.createElement("span");
     name.textContent=(g.area==="outside"?"🌿 ":"🏠 ")+g.room;count.className="cc-group-count";
     const dueNow=g.items.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate)).length;
@@ -1784,7 +1798,7 @@ function renderFood(){
   list.className="";
   const groups=new Map();shown.forEach(i=>{const cat=foodCategory(i);if(!groups.has(cat))groups.set(cat,[]);groups.get(cat).push(i)});
   [...groups.entries()].sort(([a],[b])=>a.localeCompare(b)).forEach(([cat,items])=>{
-    const details=document.createElement("details");details.className="cc-group";details.open=true;
+    const details=document.createElement("details");details.className="cc-group";
     const summary=document.createElement("summary"),name=document.createElement("span"),count=document.createElement("span");
     name.textContent=cat;count.className="cc-group-count";count.textContent=items.length+" item"+(items.length===1?"":"s");summary.append(name,count);
     const body=document.createElement("div");body.className="cc-group-body";items.forEach(i=>body.append(foodEntryRow(i)));
@@ -2573,6 +2587,11 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 window.addEventListener("focus",refreshCloudView);
 
 document.getElementById("spendingDate").value=isoLocal(new Date());
+const mealMobileToggle=document.getElementById("mealMobileToggle");
+if(mealMobileToggle)mealMobileToggle.addEventListener("click",()=>{
+  const card=mealMobileToggle.closest(".meal-plan-card"),open=card.classList.toggle("meal-open");
+  mealMobileToggle.setAttribute("aria-expanded",String(open));
+});
 const restored=restoreSession();
 if(restored?.user) startApp(restored.user);
 
