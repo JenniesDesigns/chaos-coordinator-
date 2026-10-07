@@ -373,7 +373,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.3.1 · Responsive Witchy Cat Banners</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.3.2 · Payday Reality Check</div>
   </div>
 </div>
 
@@ -626,14 +626,29 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
       <div class="stats" style="margin-bottom:14px">
         <div class="stat"><span>Take-home</span><strong id="paydayIncome">$0.00</strong></div>
-        <div class="stat"><span>Bills before payday</span><strong id="paydayBillsTotal">$0.00</strong></div>
-        <div class="stat"><span>After bills</span><strong id="paydayRemaining">$0.00</strong></div>
-        <div class="stat"><span>Savings plans</span><strong id="paydaySavingsTotal">$0.00</strong></div>
-        <div class="stat"><span>Left after plans</span><strong id="paydayAfterPlans">$0.00</strong></div>
+        <div class="stat"><span>Already spent</span><strong id="paydaySpentTotal">$0.00</strong></div>
+        <div class="stat"><span>Still committed to bills</span><strong id="paydayBillsTotal">$0.00</strong></div>
+        <div class="stat"><span>After spending & bills</span><strong id="paydayRemaining">$0.00</strong></div>
+        <div class="stat"><span>Savings planned</span><strong id="paydaySavingsTotal">$0.00</strong></div>
+        <div class="stat"><span>Actually left</span><strong id="paydayAfterPlans">$0.00</strong></div>
       </div>
       <div id="paydaySavingsList" class="empty" style="margin-bottom:12px">No paycheck savings planned yet. ✦</div>
       <div id="paydayBillList" class="empty">Nothing due before payday. The money goblin approves. ✦</div>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>🛒 Other Spending <span>Money spent this pay period</span></h2>
+    <form id="spendingForm" class="formgrid">
+      <label class="field">What was it?<input id="spendingDescription" required maxlength="120" placeholder="e.g. Groceries"></label>
+      <label class="field">Amount<input id="spendingAmount" required type="number" min="0.01" step="0.01" placeholder="0.00"></label>
+      <label class="field">Category<select id="spendingCategory"><option>Groceries</option><option>Gas / Transportation</option><option>Dining</option><option>Household</option><option>Pets</option><option>Medical</option><option>Fun</option><option selected>Other</option></select></label>
+      <label class="field">Date<input id="spendingDate" required type="date"></label>
+      <label class="field" style="grid-column:1/-1">Notes <span style="font-weight:400">(optional)</span><textarea id="spendingNotes" rows="2"></textarea></label>
+      <button class="primary" type="submit">＋ Add spending</button>
+    </form>
+    <div id="spendingPeriodLabel" class="muted" style="margin:14px 0 4px"></div>
+    <div id="spendingList" class="empty">No other spending recorded for this pay period. ✦</div>
   </div>
 
   <div class="stats" style="margin-bottom:16px">
@@ -1015,6 +1030,20 @@ body[data-accent="red"]{--pink:#ff5c68}
       <input id="linkedDebtBillId" type="hidden">
       <label class="field">Amount actually paid<input id="linkedDebtPaymentAmount" required type="number" min="0.01" step="0.01"></label>
       <div class="cc-modal-actions"><button id="cancelLinkedDebtPayment" type="button">Cancel</button><button class="primary" type="submit">Record payment</button></div>
+    </form>
+  </div>
+</div>
+<div class="cc-modal" id="spendingEditModal" aria-hidden="true">
+  <div class="cc-modal-card">
+    <h2>Edit spending</h2>
+    <form id="spendingEditForm" class="formgrid">
+      <input id="editSpendingId" type="hidden">
+      <label class="field">What was it?<input id="editSpendingDescription" required maxlength="120"></label>
+      <label class="field">Amount<input id="editSpendingAmount" required type="number" min="0.01" step="0.01"></label>
+      <label class="field">Category<select id="editSpendingCategory"><option>Groceries</option><option>Gas / Transportation</option><option>Dining</option><option>Household</option><option>Pets</option><option>Medical</option><option>Fun</option><option>Other</option><option>Bills</option></select></label>
+      <label class="field">Date<input id="editSpendingDate" required type="date"></label>
+      <label class="field" style="grid-column:1/-1">Notes<textarea id="editSpendingNotes" rows="2"></textarea></label>
+      <div class="cc-modal-actions"><button id="cancelSpendingEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
     </form>
   </div>
 </div>
@@ -1823,7 +1852,7 @@ document.getElementById("linkedDebtPaymentForm").addEventListener("submit",async
   try{
     const nextBalance=Math.max(0,Number(d.balance||0)-amount);
     await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(d.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({balance:nextBalance,updated_at:new Date().toISOString()})});
-    await completeBillPayment(b);closeLinkedDebtPayment();await Promise.all([loadDebts(),loadBills()]);
+    await completeBillPayment(b);try{await recordSpending(b.name,amount,"Bills",isoLocal(new Date()),"Recorded automatically from linked debt payment.")}catch(spendErr){console.error("Linked bill spending record failed",spendErr)}closeLinkedDebtPayment();await Promise.all([loadDebts(),loadBills(),loadSpending()]);
     toast(nextBalance===0?"Bill paid and DEBT DESTROYED. 🎉":"Bill paid and "+money(amount)+" knocked off "+d.name+". ✦");
   }catch(err){console.error(err);toast("Couldn't record that linked payment.")}
 });
@@ -1877,7 +1906,7 @@ async function completeBillPayment(b){
 }
 async function payBill(b){
   if(b.linked_debt_id){openLinkedDebtPayment(b);return}
-  try{await completeBillPayment(b);toast((b.recurrence||"monthly")==="none"?"Paid. Done and dusted. ✦":"Paid! Next due date moved forward. ✦");await loadBills()}
+  try{await completeBillPayment(b);try{await recordSpending(b.name,Number(b.amount||0),"Bills",isoLocal(new Date()),"Recorded automatically when bill was marked paid.")}catch(spendErr){console.error("Bill paid but spending record failed",spendErr);toast("Bill was paid, but its spending record did not save. Add it under Other Spending.");await loadBills();return}await Promise.all([loadBills(),loadSpending()]);toast((b.recurrence||"monthly")==="none"?"Paid. Done and dusted. ✦":"Paid! Money stays spent and the next due date moved forward. ✦")}
   catch(err){console.error(err);toast("Couldn't update that bill.")}
 }
 function openBillEdit(b){document.getElementById("editBillId").value=b.id;document.getElementById("editBillName").value=b.name;document.getElementById("editBillAmount").value=b.amount;document.getElementById("editBillDue").value=b.due_date||"";document.getElementById("editBillRecurrence").value=b.recurrence||"monthly";document.getElementById("editBillCategory").value=b.category||"Other";refreshDebtSelectors();document.getElementById("editBillLinkedDebt").value=b.linked_debt_id||"";document.getElementById("editBillAutopay").checked=!!b.autopay;document.getElementById("editBillNotes").value=b.notes||"";document.getElementById("billEditModal").classList.add("open");document.getElementById("billEditModal").setAttribute("aria-hidden","false")}
@@ -2122,7 +2151,40 @@ document.getElementById("saveDateFallback").addEventListener("click",()=>{
 document.getElementById("dateFallbackModal").addEventListener("click",e=>{if(e.target.id==="dateFallbackModal")closeDateFallback()});
 
 
-// ---- Payday View (v13.2) ----
+// ---- Spending / Payday Reality Check (v15.3.2) ----
+let spending=[];
+function currentPayPeriod(next){
+  if(!next||!paydaySettings)return null;
+  const start=new Date(next),f=paydaySettings.pay_frequency;
+  if(f==="weekly")start.setDate(start.getDate()-7);
+  else if(f==="biweekly")start.setDate(start.getDate()-14);
+  else if(f==="monthly")start.setMonth(start.getMonth()-1);
+  else start.setDate(start.getDate()-15);
+  return {start:isoLocal(start),end:isoLocal(next)};
+}
+function spendingThisPayPeriod(next){const p=currentPayPeriod(next);return p?spending.filter(x=>x.spending_date&&x.spending_date>=p.start&&x.spending_date<p.end):[]}
+async function recordSpending(description,amount,category="Other",date=isoLocal(new Date()),notes=""){
+  await supabaseRequest("/rest/v1/spending",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,description,amount:Number(amount),category,spending_date:date,notes,updated_at:new Date().toISOString()})});
+}
+async function loadSpending(){try{const data=await supabaseRequest("/rest/v1/spending?select=*&order=spending_date.desc,created_at.desc",{headers:{"Accept":"application/json"}});spending=Array.isArray(data)?data:[];renderSpending();if(typeof renderPayday==="function")renderPayday()}catch(err){console.error(err);toast("Couldn't load spending.")}}
+function renderSpending(){
+  const list=document.getElementById("spendingList");if(!list)return;
+  const next=paydaySettings?.next_payday?normalizePayday(paydaySettings):null,p=currentPayPeriod(next),items=next?spendingThisPayPeriod(next):spending;
+  document.getElementById("spendingPeriodLabel").textContent=p?"Current pay period: "+prettyDate(p.start)+" through "+prettyDate(p.end)+" (next payday)":"Set up Payday View to calculate the current pay period.";
+  list.innerHTML="";
+  if(!items.length){list.className="empty";list.textContent="No other spending recorded for this pay period. ✦";return}
+  list.className="";
+  items.forEach(s=>{const row=document.createElement("div");row.className="entry";const main=document.createElement("div");main.className="entry-main";const title=document.createElement("strong");title.textContent=s.description+" · "+money(s.amount);const meta=document.createElement("small");meta.textContent=prettyDate(s.spending_date)+" · "+(s.category||"Other");main.append(title,meta);if(s.notes){const note=document.createElement("small");note.textContent=s.notes;main.append(note)}const actions=document.createElement("div");actions.className="chore-actions";const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openSpendingEdit(s));const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeSpending(s));actions.append(edit,del);row.append(main,actions);list.append(row)});
+}
+document.getElementById("spendingForm").addEventListener("submit",async e=>{e.preventDefault();try{await recordSpending(document.getElementById("spendingDescription").value.trim(),document.getElementById("spendingAmount").value,document.getElementById("spendingCategory").value,document.getElementById("spendingDate").value,document.getElementById("spendingNotes").value.trim());e.target.reset();document.getElementById("spendingDate").value=isoLocal(new Date());await loadSpending();toast("Spending recorded. Actually Left has been updated. ✦")}catch(err){console.error(err);toast("Couldn't record that spending.")}});
+function openSpendingEdit(s){document.getElementById("editSpendingId").value=s.id;document.getElementById("editSpendingDescription").value=s.description||"";document.getElementById("editSpendingAmount").value=s.amount;document.getElementById("editSpendingCategory").value=s.category||"Other";document.getElementById("editSpendingDate").value=s.spending_date||isoLocal(new Date());document.getElementById("editSpendingNotes").value=s.notes||"";const m=document.getElementById("spendingEditModal");m.classList.add("open");m.setAttribute("aria-hidden","false")}
+function closeSpendingEdit(){const m=document.getElementById("spendingEditModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
+document.getElementById("cancelSpendingEdit").addEventListener("click",closeSpendingEdit);
+document.getElementById("spendingEditModal").addEventListener("click",e=>{if(e.target.id==="spendingEditModal")closeSpendingEdit()});
+document.getElementById("spendingEditForm").addEventListener("submit",async e=>{e.preventDefault();const id=document.getElementById("editSpendingId").value,payload={description:document.getElementById("editSpendingDescription").value.trim(),amount:Number(document.getElementById("editSpendingAmount").value),category:document.getElementById("editSpendingCategory").value,spending_date:document.getElementById("editSpendingDate").value,notes:document.getElementById("editSpendingNotes").value.trim(),updated_at:new Date().toISOString()};try{await supabaseRequest("/rest/v1/spending?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeSpendingEdit();await loadSpending();toast("Spending updated. ✦")}catch(err){console.error(err);toast("Couldn't update that spending.")}});
+async function removeSpending(s){if(!confirm("Remove "+s.description+" from spending?"))return;try{await supabaseRequest("/rest/v1/spending?id=eq."+encodeURIComponent(s.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadSpending();toast("Spending removed.")}catch(err){console.error(err);toast("Couldn't remove that spending.")}}
+
+// ---- Payday View (v15.3.2) ----
 let paydaySettings=null;
 
 function payFrequencyLabel(f){
@@ -2178,12 +2240,14 @@ function renderPayday(){
   const next=normalizePayday(paydaySettings);
   if(!next){setup.style.display="";summary.style.display="none";return}
   setup.style.display="none";summary.style.display="";
-  const items=paydayBillsThrough(next),total=items.reduce((s,b)=>s+Number(b.amount||0),0),income=Number(paydaySettings.usual_take_home||0),remaining=income-total;
+  const items=paydayBillsThrough(next),total=items.reduce((s,b)=>s+Number(b.amount||0),0),income=Number(paydaySettings.usual_take_home||0);
+  const periodSpending=spendingThisPayPeriod(next),spentTotal=periodSpending.reduce((s,x)=>s+Number(x.amount||0),0),remaining=income-spentTotal-total;
   const plannedSavings=savingsGoals.filter(g=>Number(g.per_paycheck_amount||0)>0&&Number(g.current_amount||0)<Number(g.target_amount||0));
   const savingsTotal=plannedSavings.reduce((s,g)=>s+Number(g.per_paycheck_amount||0),0),afterPlans=remaining-savingsTotal;
   document.getElementById("paydayHeadline").textContent="Next payday: "+prettyDate(isoLocal(next));
   document.getElementById("paydayFrequencyLabel").textContent=payFrequencyLabel(paydaySettings.pay_frequency);
   document.getElementById("paydayIncome").textContent=money(income);
+  document.getElementById("paydaySpentTotal").textContent=money(spentTotal);
   document.getElementById("paydayBillsTotal").textContent=money(total);
   document.getElementById("paydayRemaining").textContent=money(remaining);
   document.getElementById("paydaySavingsTotal").textContent=money(savingsTotal);
@@ -2208,7 +2272,7 @@ function renderPayday(){
 async function loadPaydaySettings(){
   try{
     const data=await supabaseRequest("/rest/v1/payday_settings?select=*&user_id=eq."+encodeURIComponent(currentUser.id),{headers:{"Accept":"application/json"}});
-    paydaySettings=Array.isArray(data)&&data.length?data[0]:null;fillPaydayForm();renderPayday();
+    paydaySettings=Array.isArray(data)&&data.length?data[0]:null;fillPaydayForm();renderPayday();renderSpending();
   }catch(err){console.error(err);toast("Couldn't load payday setup.")}
 }
 document.getElementById("payFrequency").addEventListener("change",toggleTwiceMonthly);
@@ -2219,7 +2283,7 @@ document.getElementById("paydayForm").addEventListener("submit",async e=>{
   const payload={user_id:currentUser.id,pay_frequency:frequency,next_payday:next,usual_take_home:takeHome,second_pay_day:frequency==="twice_monthly"?Number(secondRaw):null,updated_at:new Date().toISOString()};
   try{
     await supabaseRequest("/rest/v1/payday_settings?on_conflict=user_id",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(payload)});
-    paydaySettings=payload;renderPayday();toast("Payday setup saved. Money goblin has a plan. ✦");
+    paydaySettings=payload;renderPayday();renderSpending();toast("Payday setup saved. Money goblin has a plan. ✦");
   }catch(err){console.error(err);toast("Couldn't save payday setup: "+(err.message||"unknown error"))}
 });
 document.getElementById("editPaydaySettings").addEventListener("click",()=>{fillPaydayForm();document.getElementById("paydaySummary").style.display="none";document.getElementById("paydaySetup").style.display=""});
@@ -2451,7 +2515,7 @@ async function startApp(user){
   authGate.style.display="none";
   await loadSpaces();
   await loadUserSettings();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings(),loadSpending()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
@@ -2475,13 +2539,14 @@ async function refreshCloudView(){
   ccLastCloudRefresh=now;
   await loadSpaces();
   await loadUserSettings();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings(),loadSpending()]);
   await loadHousekeepingSettings();
   renderLiveDashboard();
 }
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshCloudView()});
 window.addEventListener("focus",refreshCloudView);
 
+document.getElementById("spendingDate").value=isoLocal(new Date());
 const restored=restoreSession();
 if(restored?.user) startApp(restored.user);
 
