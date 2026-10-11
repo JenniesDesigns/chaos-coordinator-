@@ -396,7 +396,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.6 · Chore Library 2.0</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.7 · Payday Reality Check</div>
   </div>
 </div>
 
@@ -655,9 +655,21 @@ body[data-accent="red"]{--pink:#ff5c68}
         </div>
         <button id="editPaydaySettings" type="button">Edit payday setup</button>
       </div>
+      <div class="cc-reality" style="padding:14px;margin:0 0 14px;border:1px solid var(--pink);border-radius:12px">
+        <strong>💰 Payday Reality Check</strong>
+        <p class="muted" style="margin:6px 0">Enter the money actually in your bank account <strong>right now, before you spend or pay anything else.</strong> Previous transactions remain in your history.</p>
+        <form id="realityForm" class="formgrid" style="margin:10px 0">
+          <label class="field">Actual bank balance ($)<input id="realityAmount" type="number" step="0.01" min="0" required placeholder="0.00"></label>
+          <label class="field">Note (optional)<input id="realityNote" maxlength="180" placeholder="Payday bank check"></label>
+          <button class="primary" type="submit">Save actual balance</button>
+        </form>
+        <div id="realityStatus" class="muted" aria-live="polite">No actual balance saved for this pay period.</div>
+        <details style="margin-top:8px"><summary>Balance adjustment history</summary><div id="realityHistory" class="muted" style="margin-top:8px">No adjustments yet.</div></details>
+        <small class="muted">Reality outranks the spreadsheet. ✦</small>
+      </div>
       <div class="stats" style="margin-bottom:14px">
-        <div class="stat"><span>Take-home</span><strong id="paydayIncome">$0.00</strong></div>
-        <div class="stat"><span>Already spent</span><strong id="paydaySpentTotal">$0.00</strong></div>
+        <div class="stat"><span id="paydayIncomeLabel">Take-home (estimate)</span><strong id="paydayIncome">$0.00</strong></div>
+        <div class="stat"><span id="paydaySpentLabel">Already spent</span><strong id="paydaySpentTotal">$0.00</strong></div>
         <div class="stat"><span>Still committed to bills</span><strong id="paydayBillsTotal">$0.00</strong></div>
         <div class="stat"><span>After spending & bills</span><strong id="paydayRemaining">$0.00</strong></div>
         <div class="stat"><span>Savings planned</span><strong id="paydaySavingsTotal">$0.00</strong></div>
@@ -2390,6 +2402,8 @@ async function removeSpending(s){if(!confirm("Remove "+s.description+" from spen
 
 // ---- Payday View (v15.3.2) ----
 let paydaySettings=null;
+let realityChecks=[];
+let realityLoaded=false;
 
 function payFrequencyLabel(f){
   return ({weekly:"Paid weekly",biweekly:"Paid every 2 weeks",twice_monthly:"Paid twice a month",monthly:"Paid monthly"})[f]||"";
@@ -2436,6 +2450,47 @@ function fillPaydayForm(){
   document.getElementById("secondPayDay").value=paydaySettings.second_pay_day||"";
   toggleTwiceMonthly();
 }
+// Reality snapshots are append-only: correcting a balance makes a new record,
+// so the earlier figure remains visible in the audit history.
+function activeRealityCheck(next){
+  const p=currentPayPeriod(next);if(!p)return null;
+  return realityChecks.filter(r=>r.period_start===p.start&&r.recorded_at&&r.recorded_at.slice(0,10)<=p.end)
+    .sort((a,b)=>b.recorded_at.localeCompare(a.recorded_at))[0]||null;
+}
+function postSnapshotSpending(snapshot){
+  if(!snapshot)return [];
+  const today=isoLocal(new Date());
+  return spending.filter(x=>x.created_at&&x.created_at>snapshot.recorded_at&&x.spending_date&&x.spending_date>=snapshot.recorded_at.slice(0,10)&&x.spending_date<=today);
+}
+function renderRealityCheck(next){
+  const p=currentPayPeriod(next),current=activeRealityCheck(next),status=document.getElementById("realityStatus"),history=document.getElementById("realityHistory");
+  if(!status||!history)return;
+  status.textContent=current?"Bank balance recorded: "+money(current.amount)+" · "+new Date(current.recorded_at).toLocaleString()+". Only later recorded spending is subtracted.":"No actual bank balance saved for this pay period. Using estimated take-home until you save one.";
+  const rows=realityChecks.filter(r=>p&&r.period_start===p.start).sort((a,b)=>b.recorded_at.localeCompare(a.recorded_at));
+  history.innerHTML="";
+  if(!rows.length){history.textContent="No adjustments this pay period.";return}
+  rows.forEach((r,i)=>{const el=document.createElement("div");el.className="entry";const info=document.createElement("div");info.className="entry-main";const label=document.createElement("strong");label.textContent=money(r.amount)+(i===0?" · Current":" · Superseded");const note=document.createElement("small");note.textContent=new Date(r.recorded_at).toLocaleString()+(r.note?" · "+r.note:"");info.append(label,note);el.append(info);history.append(el)});
+}
+async function loadRealityChecks(){
+  if(!currentUser)return;
+  try{
+    const rows=await supabaseRequest("/rest/v1/payday_balance_checks?select=*&user_id=eq."+encodeURIComponent(currentUser.id)+"&order=recorded_at.desc&limit=100",{headers:{"Accept":"application/json"}});
+    realityChecks=Array.isArray(rows)?rows:[];realityLoaded=true;renderPayday();
+  }catch(err){realityLoaded=false;console.error("Reality checks unavailable",err);const status=document.getElementById("realityStatus");if(status)status.textContent="Balance adjustments aren't connected yet. Run the included SQL setup before saving.";}
+}
+document.getElementById("realityForm").addEventListener("submit",async e=>{
+  e.preventDefault();const next=paydaySettings?.next_payday?normalizePayday(paydaySettings):null,p=currentPayPeriod(next);
+  if(!p){toast("Set up your payday schedule first.");return}
+  if(!realityLoaded){toast("Balance history isn't connected yet. Run the SQL setup first.");return}
+  const raw=document.getElementById("realityAmount").value,amount=Number(raw);
+  if(raw.trim()===""||!Number.isFinite(amount)||amount<0){toast("Enter a valid bank balance.");return}
+  const btn=e.target.querySelector('button[type="submit"]');btn.disabled=true;
+  try{
+    await supabaseRequest("/rest/v1/payday_balance_checks",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,period_start:p.start,amount:Math.round(amount*100)/100,note:document.getElementById("realityNote").value.trim()||null})});
+    await loadRealityChecks();document.getElementById("realityNote").value="";toast("Bank balance saved. Reality outranks the spreadsheet. ✦");
+  }catch(err){console.error(err);toast("Couldn't save bank balance: "+(err.message||"unknown error"))}
+  finally{btn.disabled=false}
+});
 function renderPayday(){
   const setup=document.getElementById("paydaySetup"),summary=document.getElementById("paydaySummary");
   if(!paydaySettings||!paydaySettings.next_payday){
@@ -2445,12 +2500,18 @@ function renderPayday(){
   if(!next){setup.style.display="";summary.style.display="none";return}
   setup.style.display="none";summary.style.display="";
   const items=paydayBillsThrough(next),total=items.reduce((s,b)=>s+Number(b.amount||0),0),income=Number(paydaySettings.usual_take_home||0);
-  const periodSpending=spendingThisPayPeriod(next),spentTotal=periodSpending.reduce((s,x)=>s+Number(x.amount||0),0),remaining=income-spentTotal-total;
+  const snapshot=realityLoaded?activeRealityCheck(next):null;
+  const periodSpending=snapshot?postSnapshotSpending(snapshot):spendingThisPayPeriod(next);
+  const spentTotal=periodSpending.reduce((s,x)=>s+Number(x.amount||0),0);
+  const starting=snapshot?Number(snapshot.amount):income,remaining=starting-spentTotal-total;
+  document.getElementById("paydayIncomeLabel").textContent=snapshot?"Actual bank balance (snapshot)":"Take-home (estimate)";
+  document.getElementById("paydaySpentLabel").textContent=snapshot?"Spending recorded since snapshot":"Already spent";
+  renderRealityCheck(next);
   const plannedSavings=savingsGoals.filter(g=>Number(g.per_paycheck_amount||0)>0&&Number(g.current_amount||0)<Number(g.target_amount||0));
   const savingsTotal=plannedSavings.reduce((s,g)=>s+Number(g.per_paycheck_amount||0),0),afterPlans=remaining-savingsTotal;
   document.getElementById("paydayHeadline").textContent="Next payday: "+prettyDate(isoLocal(next));
   document.getElementById("paydayFrequencyLabel").textContent=payFrequencyLabel(paydaySettings.pay_frequency);
-  document.getElementById("paydayIncome").textContent=money(income);
+  document.getElementById("paydayIncome").textContent=money(starting);
   document.getElementById("paydaySpentTotal").textContent=money(spentTotal);
   document.getElementById("paydayBillsTotal").textContent=money(total);
   document.getElementById("paydayRemaining").textContent=money(remaining);
@@ -2476,7 +2537,7 @@ function renderPayday(){
 async function loadPaydaySettings(){
   try{
     const data=await supabaseRequest("/rest/v1/payday_settings?select=*&user_id=eq."+encodeURIComponent(currentUser.id),{headers:{"Accept":"application/json"}});
-    paydaySettings=Array.isArray(data)&&data.length?data[0]:null;fillPaydayForm();renderPayday();renderSpending();
+    paydaySettings=Array.isArray(data)&&data.length?data[0]:null;fillPaydayForm();renderPayday();renderSpending();await loadRealityChecks();
   }catch(err){console.error(err);toast("Couldn't load payday setup.")}
 }
 document.getElementById("payFrequency").addEventListener("change",toggleTwiceMonthly);
