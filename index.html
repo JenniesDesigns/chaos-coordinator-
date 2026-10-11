@@ -395,7 +395,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.4.2 · Tidy Little Doors</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.5.1 · Chore Library 2.0</div>
   </div>
 </div>
 
@@ -1069,6 +1069,30 @@ body[data-accent="red"]{--pink:#ff5c68}
       <label class="field" style="grid-column:1/-1">Notes<textarea id="editSpendingNotes" rows="2"></textarea></label>
       <div class="cc-modal-actions"><button id="cancelSpendingEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
     </form>
+  </div>
+</div>
+<div class="modal" id="choreLibraryModal" aria-hidden="true">
+  <div class="modal-card" style="width:min(780px,95vw);max-height:90vh;overflow-y:auto">
+    <h2>✨ Chore Library 2.0</h2>
+    <p class="muted" id="choreLibraryCount"></p>
+    <p class="muted">Select chores by room. Your existing chores and dates will not change.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0"><button type="button" id="choreSelectAll">Select all available</button><strong id="choreSelectedCount">0 selected</strong></div>
+    <div id="choreLibraryItems" style="max-height:270px;overflow-y:auto"></div>
+    <h3>When are your free days?</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <label><input type="checkbox" class="chore-free-day" value="0" checked> Sun</label>
+      <label><input type="checkbox" class="chore-free-day" value="1"> Mon</label>
+      <label><input type="checkbox" class="chore-free-day" value="2"> Tue</label>
+      <label><input type="checkbox" class="chore-free-day" value="3"> Wed</label>
+      <label><input type="checkbox" class="chore-free-day" value="4"> Thu</label>
+      <label><input type="checkbox" class="chore-free-day" value="5"> Fri</label>
+      <label><input type="checkbox" class="chore-free-day" value="6" checked> Sat</label>
+    </div>
+    <label class="field">Scheduling preference
+      <select id="choreWorkload"><option value="lightBusy">Lighter jobs on busy days; big jobs on free days</option><option value="bigFree">Big jobs on free days</option><option value="freeHeavy">Most flexible chores on free days</option><option value="even">Spread chores evenly</option></select>
+    </label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button class="primary" type="button" id="chorePreviewBtn">Preview first due dates</button><button class="primary" type="button" id="choreLibraryAdd" disabled>Add selected chores</button><button type="button" id="closeChoreLibrary">Cancel</button></div>
+    <div id="choreLibraryPreview" style="max-height:260px;overflow:auto"></div>
   </div>
 </div>
 <script>
@@ -1925,30 +1949,6 @@ function printGroceryList(){
   <footer>${items.length} thing${items.length===1?"":"s"} to acquire. Go forth. 🛒</footer>
   <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),150));<\/script>
   
-<div class="modal" id="choreLibraryModal" aria-hidden="true">
-  <div class="modal-card" style="width:min(780px,95vw);max-height:90vh;overflow-y:auto">
-    <h2>✨ Chore Library 2.0</h2>
-    <p class="muted" id="choreLibraryCount"></p>
-    <p class="muted">Select chores by room. Your existing chores and dates will not change.</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0"><button type="button" id="choreSelectAll">Select all available</button><strong id="choreSelectedCount">0 selected</strong></div>
-    <div id="choreLibraryItems" style="max-height:270px;overflow-y:auto"></div>
-    <h3>When are your free days?</h3>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-      <label><input type="checkbox" class="chore-free-day" value="0" checked> Sun</label>
-      <label><input type="checkbox" class="chore-free-day" value="1"> Mon</label>
-      <label><input type="checkbox" class="chore-free-day" value="2"> Tue</label>
-      <label><input type="checkbox" class="chore-free-day" value="3"> Wed</label>
-      <label><input type="checkbox" class="chore-free-day" value="4"> Thu</label>
-      <label><input type="checkbox" class="chore-free-day" value="5"> Fri</label>
-      <label><input type="checkbox" class="chore-free-day" value="6" checked> Sat</label>
-    </div>
-    <label class="field">Scheduling preference
-      <select id="choreWorkload"><option value="lightBusy">Lighter jobs on busy days; big jobs on free days</option><option value="bigFree">Big jobs on free days</option><option value="freeHeavy">Most flexible chores on free days</option><option value="even">Spread chores evenly</option></select>
-    </label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button class="primary" type="button" id="chorePreviewBtn">Preview first due dates</button><button class="primary" type="button" id="choreLibraryAdd" disabled>Add selected chores</button><button type="button" id="closeChoreLibrary">Cancel</button></div>
-    <div id="choreLibraryPreview" style="max-height:260px;overflow:auto"></div>
-  </div>
-</div>
 </body></html>`);
   w.document.close();
 }
