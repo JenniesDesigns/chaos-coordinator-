@@ -172,6 +172,7 @@ input,select,textarea,button{max-width:100%}
 .live-copy{min-width:0;overflow-wrap:anywhere}.live-copy strong{color:var(--text)}.live-copy small{display:block;color:var(--muted);margin-top:2px}
 .focus-room{font-size:20px;font-weight:900;color:var(--teal);margin:7px 0}
 @media(max-width:650px){.command-summary{gap:6px}.command-stat{padding:9px}.command-stat b{font-size:18px}}
+.season-picks{display:flex;gap:9px;flex-wrap:wrap;margin-top:7px}.season-picks label{display:flex;align-items:center;gap:4px;font-weight:500;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:9px}.season-picks input{width:auto!important;margin:0!important}.season-tag{font-size:12px;color:var(--muted)}
 </style>
 <style>
 .savings-plan{margin-top:10px;padding:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.035)}
@@ -395,7 +396,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       </div>
     </form>
     <div class="auth-msg" id="authMsg"></div>
-    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.5.2 · Chore Library 2.0</div>
+    <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.6 · Chore Library 2.0</div>
   </div>
 </div>
 
@@ -484,7 +485,7 @@ body[data-accent="red"]{--pink:#ff5c68}
 
   <div id="hkChores" style="display:none">
     <div class="card">
-      <h2>Add a chore</h2>
+      <h2>Add a chore</h2><p class="muted">Choose seasons for chores that should only show up part of the year.</p>
       <form id="choreForm" class="chore-form">
         <label class="field chore-title-field">Chore<input id="choreTitle" required placeholder="e.g. Clean kitchen counters"></label>
         <label class="field">Area<select id="choreArea"><option value="inside">🏠 Inside</option><option value="outside">🌿 Outside</option></select></label>
@@ -496,16 +497,17 @@ body[data-accent="red"]{--pink:#ff5c68}
             <option value="semiannual">Twice a year</option><option value="yearly">Yearly</option>
           </select>
         </label>
+        <label class="field">Seasons <span style="font-weight:400">(optional — leave blank for year-round)</span><div class="season-picks" id="addChoreSeasons"><label><input type="checkbox" value="spring"> 🌷 Spring</label><label><input type="checkbox" value="summer"> ☀️ Summer</label><label><input type="checkbox" value="fall"> 🍂 Fall</label><label><input type="checkbox" value="winter"> ❄️ Winter</label></div></label>
         <label class="field">First due<input id="choreDue" type="date" required></label>
         <button class="primary" type="submit">＋ Add chore</button>
       </form>
     </div>
     <div class="card">
-      <h2>All chores</h2>
+      <h2>All chores</h2><p class="muted">Seasonal chores appear on your due lists only during their selected seasons. They remain visible here for editing.</p>
       <div class="chore-filter">
         <button type="button" class="active" data-chore-filter="all">All</button>
         <button type="button" data-chore-filter="due">Due now</button>
-        <button type="button" data-chore-filter="done">Completed</button>
+        <button type="button" data-chore-filter="done">Completed</button><button type="button" data-chore-filter="seasonal">🌷 Seasonal</button>
       </div>
       <div id="allChoreList" class="empty">No chores yet.</div>
     </div>
@@ -513,7 +515,7 @@ body[data-accent="red"]{--pink:#ff5c68}
 
   <div id="hkRooms" style="display:none">
     <div class="card">
-      <h2>Rooms & Spaces</h2>
+      <h2>Rooms & Spaces</h2><p class="muted">🌷 Spring: Mar–May · ☀️ Summer: Jun–Aug · 🍂 Fall: Sep–Nov · ❄️ Winter: Dec–Feb</p>
       <p class="muted">Organize chores by room or outdoor space. Each chore keeps its own schedule.</p>
       <h3>🏠 Inside</h3><div id="insideRoomGrid" class="room-grid"></div>
       <h3 style="margin-top:18px">🌿 Outside</h3><div id="outsideRoomGrid" class="room-grid"></div>
@@ -885,6 +887,7 @@ body[data-accent="red"]{--pink:#ff5c68}
         <option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option><option value="quarterly">Every 3 months</option>
         <option value="semiannual">Twice a year</option><option value="yearly">Yearly</option>
       </select></label>
+      <label class="field">Seasons <span style="font-weight:400">(optional — leave blank for year-round)</span><div class="season-picks" id="editChoreSeasons"><label><input type="checkbox" value="spring"> 🌷 Spring</label><label><input type="checkbox" value="summer"> ☀️ Summer</label><label><input type="checkbox" value="fall"> 🍂 Fall</label><label><input type="checkbox" value="winter"> ❄️ Winter</label></div></label>
       <label class="field">Due date<input id="editChoreDue" type="date" required></label>
       <div class="cc-modal-actions"><button id="cancelChoreEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
     </form>
@@ -1353,6 +1356,46 @@ function roomById(id){return spaces.find(s=>s.id===id)}
 function taskRoom(c){const linked=roomById(c.room_id);if(linked)return linked.name;const m=(c.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
 function taskArea(c){const linked=roomById(c.room_id);if(linked)return linked.area;if(c.area)return c.area;const m=(c.description||"").match(/\[CC_AREA:([^\]]+)\]/);return m?m[1]:"inside"}
 function taskDescription(room,repeat,area="inside"){return `[CC_ROOM:${room}] [CC_REPEAT:${repeat}] [CC_AREA:${area}]`}
+// Seasonal metadata is stored alongside existing task metadata in Supabase's description field.
+// No schema change, no browser-only state, and existing descriptions remain intact.
+const seasonNames={spring:"🌷 Spring",summer:"☀️ Summer",fall:"🍂 Fall",winter:"❄️ Winter"};
+const seasonMonths={spring:[2,3,4],summer:[5,6,7],fall:[8,9,10],winter:[11,0,1]};
+function choreSeasons(c){const m=(c.description||"").match(/\[CC_SEASONS:([^\]]*)\]/);return m?m[1].split(",").filter(x=>seasonNames[x]):[]}
+function seasonalDescription(base,seasons){return (base||"").replace(/\s*\[CC_SEASONS:[^\]]*\]/g,"").trim()+(seasons.length?" [CC_SEASONS:"+seasons.join(",")+"]":"")}
+function pickedSeasons(id){return [...document.querySelectorAll("#"+id+" input:checked")].map(x=>x.value)}
+function setPickedSeasons(id,values){document.querySelectorAll("#"+id+" input").forEach(x=>x.checked=values.includes(x.value))}
+function activeSeason(c,date=localDate){const seasons=choreSeasons(c);if(!seasons.length)return true;const m=Number(date.slice(5,7))-1;return seasons.some(season=>seasonMonths[season].includes(m))}
+function seasonText(c){return choreSeasons(c).map(x=>seasonNames[x]).join(" · ")}
+function nextSeasonalDue(dateStr,repeat,seasons){
+  if(!seasons.length)return nextDue(dateStr,repeat);
+  // Search for the first scheduled occurrence in an active season after today.
+  let date=nextDue(dateStr,repeat);
+  for(let i=0;i<1500;i++){
+    if(seasons.some(x=>seasonMonths[x].includes(Number(date.slice(5,7))-1)))return date;
+    date=nextDue(date,repeat);
+  }
+  return date;
+}
+function seasonalStarter(title,room){
+  const t=title.toLowerCase(),r=room.toLowerCase();
+  if(/cover pool|close pool|winteriz|rake leaves|fall cleanup|test the furnace/.test(t))return ["fall"];
+  if(/open pool|spring cleanup|plant seeds|prepare garden beds/.test(t))return ["spring"];
+  if(/snow|ice removal|shovel/.test(t))return ["winter"];
+  if(/cut grass|edge \/ trim|weed garden|deadhead|water plants|garden watering/.test(t))return ["spring","summer","fall"];
+  if(/seasonal (yard|garden) cleanup/.test(t))return ["spring","fall"];
+  if(/clean gutters/.test(t))return ["spring","fall"];
+  return [];
+}
+function firstDateInSeasons(date,seasons){
+  if(!seasons.length)return date;
+  const d=new Date(date+"T12:00:00");
+  for(let i=0;i<370;i++){
+    const m=d.getMonth();if(seasons.some(x=>seasonMonths[x].includes(m)))return `${d.getFullYear()}-${String(m+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    d.setDate(d.getDate()+1);
+  }
+  return date;
+}
+
 function recurrenceLabel(value){return ({none:"One time",daily:"Daily",every_other_day:"Every other day",weekly:"Weekly",biweekly:"Every 2 weeks",monthly:"Monthly",quarterly:"Every 3 months",semiannual:"Twice a year",yearly:"Yearly"})[value]||"One time"}
 function rotationFocus(){const r=roomById(housekeepingSettings?.focus_room_id);return r?.name||""}
 function fillRoomSelect(select,area,value=""){
@@ -1503,7 +1546,7 @@ function suggestedChoreDates(items){
       if(item.repeat==="daily")s=offset;
       if(s<score){score=s;best=date}
     }
-    load.set(best,(load.get(best)||0)+(item.effort==="big"?2:1));return {...item,date:best};
+    best=firstDateInSeasons(best,item.seasons||[]);load.set(best,(load.get(best)||0)+(item.effort==="big"?2:1));return {...item,date:best};
   });
 }
 function showChoreLibrary(){
@@ -1513,7 +1556,7 @@ function showChoreLibrary(){
   for(const [room,items] of Object.entries(starterChores)){
     const space=spaces.find(s=>s.name.toLowerCase()===room.toLowerCase());if(!space)continue;
     for(const [title,repeat] of items){const key=(room+"|"+title).toLowerCase();if(existing.has(key))continue;
-      choreLibraryState.items.push({key,room,title,repeat,effort:choreEffort(title),space});
+      choreLibraryState.items.push({key,room,title,repeat,effort:choreEffort(title),space,seasons:seasonalStarter(title,room)});
     }
   }
   document.getElementById("choreLibraryCount").textContent=choreLibraryState.items.length+" available chores not already on your list";
@@ -1525,7 +1568,7 @@ function showChoreLibrary(){
     const body=document.createElement("div");body.className="cc-group-body";
     items.forEach(item=>{const label=document.createElement("label");label.style.cssText="display:flex;gap:10px;align-items:flex-start;padding:7px 0;cursor:pointer";
       const cb=document.createElement("input");cb.type="checkbox";cb.style.marginTop="4px";cb.addEventListener("change",()=>{if(cb.checked)choreLibraryState.selected.add(item.key);else choreLibraryState.selected.delete(item.key);document.getElementById("choreSelectedCount").textContent=choreLibraryState.selected.size+" selected";document.getElementById("choreLibraryPreview").innerHTML="";document.getElementById("choreLibraryAdd").disabled=true});
-      const txt=document.createElement("span");txt.textContent=item.title+" · "+recurrenceLabel(item.repeat)+" · "+({quick:"Quick",regular:"Regular",big:"Big job"}[item.effort]);label.append(cb,txt);body.append(label)});
+      const txt=document.createElement("span");txt.textContent=item.title+" · "+recurrenceLabel(item.repeat)+" · "+({quick:"Quick",regular:"Regular",big:"Big job"}[item.effort])+(item.seasons.length?" · "+item.seasons.map(x=>seasonNames[x]).join(" / "):"");label.append(cb,txt);body.append(label)});
     d.append(body);host.append(d);
   }
   document.getElementById("choreSelectedCount").textContent="0 selected";document.getElementById("choreLibraryPreview").innerHTML="";document.getElementById("choreLibraryAdd").disabled=true;
@@ -1545,7 +1588,7 @@ document.getElementById("chorePreviewBtn").addEventListener("click",()=>{
   if(!selected.length){host.textContent="Choose some chores first.";return}
   const p=document.createElement("p");p.className="muted";p.textContent="Review these first due dates. Change any date before adding.";host.append(p);
   choreLibraryState.preview.forEach((item,i)=>{const label=document.createElement("label");label.style.cssText="display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line, #ddd)";
-    const span=document.createElement("span");span.textContent=item.room+" · "+item.title;span.style.flex="1 1 190px";
+    const span=document.createElement("span");span.textContent=item.room+" · "+item.title+(item.seasons.length?" · "+item.seasons.map(x=>seasonNames[x]).join(" / "):"");span.style.flex="1 1 190px";
     const input=document.createElement("input");input.type="date";input.value=item.date;input.min=localDate;input.setAttribute("aria-label","First due date for "+item.title);input.addEventListener("change",()=>{choreLibraryState.preview[i].date=input.value});label.append(span,input);host.append(label)});
   document.getElementById("choreLibraryAdd").disabled=false;
 });
@@ -1554,7 +1597,7 @@ document.getElementById("choreLibraryAdd").addEventListener("click",async()=>{
   if(!items.length)return;btn.disabled=true;
   try{
     const existing=new Set(chores.map(c=>(taskRoom(c)+"|"+c.title).toLowerCase()));
-    const rows=items.filter(x=>!existing.has(x.key)).map(x=>({user_id:currentUser.id,title:x.title,description:taskDescription(x.room,x.repeat,x.space.area),due_date:x.date,completed:false,recurring:x.repeat!=="none",room_id:x.space.id,recurrence:x.repeat,area:x.space.area}));
+    const rows=items.filter(x=>!existing.has(x.key)).map(x=>({user_id:currentUser.id,title:x.title,description:seasonalDescription(taskDescription(x.room,x.repeat,x.space.area),x.seasons||[]),due_date:x.date,completed:false,recurring:x.repeat!=="none",room_id:x.space.id,recurrence:x.repeat,area:x.space.area}));
     if(!rows.length){toast("Those chores are already on your list.");return}
     await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify(rows)});
     closeChoreLibrary();await loadChores();toast(rows.length+" chores added. We ride dirty! 🧹");
@@ -1569,7 +1612,7 @@ function choreRow(c){
   const main=document.createElement("div");main.className="chore-main";
   const title=document.createElement("div");title.className="chore-title";title.textContent=c.title;
   const meta=document.createElement("div");meta.className="chore-meta";
-  meta.textContent=(room?(taskArea(c)==="outside"?"🌿 ":"🏠 ")+room+" · ":"")+(c.due_date?"Due "+prettyDate(c.due_date):"No due date")+" · "+recurrenceLabel(repeat);
+  meta.textContent=(room?(taskArea(c)==="outside"?"🌿 ":"🏠 ")+room+" · ":"")+(c.due_date?"Due "+prettyDate(c.due_date):"No due date")+" · "+recurrenceLabel(repeat)+(choreSeasons(c).length?" · "+seasonText(c)+(activeSeason(c)?"":" · Hibernating"):"");
   main.append(title,meta);
   const actions=document.createElement("div");actions.className="chore-actions";
   const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";
@@ -1578,7 +1621,7 @@ function choreRow(c){
     check.disabled=true;
     try{
       if(check.checked&&repeat!=="none"){
-        const nd=nextDue(c.due_date||today,repeat);
+        const nd=nextSeasonalDue(c.due_date||today,repeat,choreSeasons(c));
         await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({completed:false,due_date:nd})});
         c.completed=false;c.due_date=nd;toast("Done! Next one: "+prettyDate(nd)+".");
       }else{
@@ -1616,11 +1659,11 @@ function renderList(el,items,empty){
 }
 function renderChores(){
   const today=localDate;
-  const due=chores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=today)).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));
+  const due=chores.filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=today)).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));
   document.getElementById("choreCount").textContent=due.length+" due";
   renderList(document.getElementById("choreList"),due,"Nothing due. Enjoy the suspicious silence. ✦");
   let all=chores.slice();
-  if(choreFilter==="due")all=due; else if(choreFilter==="done")all=all.filter(c=>c.completed);
+  if(choreFilter==="due")all=due; else if(choreFilter==="done")all=all.filter(c=>c.completed);else if(choreFilter==="seasonal")all=all.filter(c=>choreSeasons(c).length);
   all.sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
   renderList(document.getElementById("allChoreList"),all,"Nothing here yet.");
   renderRooms();renderDashboardChores();renderLiveDashboard();
@@ -1640,7 +1683,7 @@ async function loadChores(){
 choreForm.addEventListener("submit",async e=>{
   e.preventDefault();if(!currentUser){toast("Please sign in first.");return}
   const title=document.getElementById("choreTitle").value.trim(),area=document.getElementById("choreArea").value,roomSelect=document.getElementById("choreRoom"),room=roomSelect.value,room_id=selectedRoomId(roomSelect),repeat=document.getElementById("choreRepeat").value,due=document.getElementById("choreDue").value;
-  try{await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,description:taskDescription(room,repeat,area),due_date:due,completed:false,recurring:repeat!=="none",room_id,recurrence:repeat,area})})}
+  try{await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,description:seasonalDescription(taskDescription(room,repeat,area),pickedSeasons("addChoreSeasons")),due_date:due,completed:false,recurring:repeat!=="none",room_id,recurrence:repeat,area})})}
   catch(err){console.error("Chore save failed",err);toast("Couldn't save chore: "+(err.message||"unknown error"));return}
   choreForm.reset();document.getElementById("choreArea").value="inside";fillRoomSelect(document.getElementById("choreRoom"),"inside");choreDue.value=localDate;document.getElementById("choreRepeat").value="weekly";await loadChores();toast("Chore added!");
 });
@@ -1655,7 +1698,7 @@ function openChoreEdit(c){
   document.getElementById("editChoreId").value=c.id;document.getElementById("editChoreTitle").value=c.title;
   document.getElementById("editChoreArea").value=taskArea(c);
   fillRoomSelect(document.getElementById("editChoreRoom"),taskArea(c),taskRoom(c));document.getElementById("editChoreRepeat").value=taskRepeat(c);
-  document.getElementById("editChoreDue").value=c.due_date||localDate;choreEditModal.classList.add("open");choreEditModal.setAttribute("aria-hidden","false")
+  document.getElementById("editChoreDue").value=c.due_date||localDate;setPickedSeasons("editChoreSeasons",choreSeasons(c));choreEditModal.classList.add("open");choreEditModal.setAttribute("aria-hidden","false")
 }
 function closeChoreEdit(){choreEditModal.classList.remove("open");choreEditModal.setAttribute("aria-hidden","true")}
 document.getElementById("cancelChoreEdit").addEventListener("click",closeChoreEdit);
@@ -1664,13 +1707,13 @@ document.getElementById("choreEditForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const id=document.getElementById("editChoreId").value,title=document.getElementById("editChoreTitle").value.trim(),area=document.getElementById("editChoreArea").value,roomSelect=document.getElementById("editChoreRoom"),room=roomSelect.value,room_id=selectedRoomId(roomSelect),repeat=document.getElementById("editChoreRepeat").value,due=document.getElementById("editChoreDue").value;
   try{
-    await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description:taskDescription(room,repeat,area),due_date:due,recurring:repeat!=="none",room_id,recurrence:repeat,area})});
+    await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description:seasonalDescription(taskDescription(room,repeat,area),pickedSeasons("editChoreSeasons")),due_date:due,recurring:repeat!=="none",room_id,recurrence:repeat,area})});
     closeChoreEdit();await loadChores();toast("Chore updated.")
   }catch(err){console.error(err);toast("Couldn't save those changes.")}
 });
 function renderDashboardChores(){
   const target=document.getElementById("dashboardChores");if(!target)return;
-  const due=chores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate)).slice(0,5);target.innerHTML="";
+  const due=chores.filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=localDate)).slice(0,5);target.innerHTML="";
   if(!due.length){target.className="empty";target.textContent="Nothing due. The goblin approves. ✦";return}
   target.className="today-chore-list";due.forEach(c=>{const d=document.createElement("div");d.className="today-chore";const x=document.createElement("input");x.type="checkbox";x.className="chore-check";const s=document.createElement("span");s.textContent=c.title+(taskRoom(c)?" · "+taskRoom(c):"");x.addEventListener("change",()=>{const row=choreRow(c),box=row.querySelector(".chore-check");box.checked=true;box.dispatchEvent(new Event("change"))});d.append(x,s);target.append(d)})
 }
@@ -2584,7 +2627,7 @@ document.getElementById("settingsForm").addEventListener("submit",async e=>{
 function renderLiveDashboard(){
   try{
     renderDashboardMeals();
-    const due=chores.filter(c=>!c.completed&&(!c.due_date||c.due_date<=localDate));
+    const due=chores.filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=localDate));
     const dashToday=new Date();dashToday.setHours(0,0,0,0);const dashThrough=new Date(dashToday);dashThrough.setDate(dashThrough.getDate()+30);dashThrough.setHours(23,59,59,999);
     const future=events.filter(e=>{const d=eventDateObj(e.event_date);return d&&d>=dashToday&&d<=dashThrough}).sort((a,b)=>((a.event_date||"")+(a.event_time||"")).localeCompare((b.event_date||"")+(b.event_time||"")));
     const active=goals.filter(g=>!g.completed);
