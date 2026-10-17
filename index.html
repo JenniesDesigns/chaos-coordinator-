@@ -2023,12 +2023,12 @@ function printGroceryList(){
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Chaos Coordinator Grocery List</title><style>
     @page{size:letter portrait;margin:.42in}
     *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff;margin:0;font-size:12pt;line-height:1.22}
-    header{border-bottom:2px solid #111;padding-bottom:5px;margin-bottom:10px}
+    header{padding-bottom:5px;margin-bottom:10px}
     h1{font-size:19pt;margin:0 0 2px}.tag{font-size:9pt;letter-spacing:1px;text-transform:uppercase}
-    .columns{column-count:2;column-gap:.32in;column-rule:1px solid #ddd}
+    .columns{column-count:2;column-gap:.32in;column-rule:none}
     .category{break-inside:avoid-column;page-break-inside:avoid;margin:0 0 10px}
-    h2{font-size:11pt;font-weight:800;text-transform:uppercase;letter-spacing:.2px;border-bottom:1.5px solid #111;margin:0 0 3px;padding:3px 0;break-after:avoid}
-    ul{list-style:none;padding:0;margin:0}li{display:flex;align-items:flex-start;gap:7px;padding:4px 0;border-bottom:1px solid #ddd;break-inside:avoid;overflow-wrap:anywhere}
+    h2{font-size:11pt;font-weight:800;text-transform:uppercase;letter-spacing:.2px;margin:0 0 3px;padding:3px 0;break-after:avoid}
+    ul{list-style:none;padding:0;margin:0}li{display:flex;align-items:flex-start;gap:7px;padding:4px 0;break-inside:avoid;overflow-wrap:anywhere}
     .box{width:12px;height:12px;border:1.5px solid #111;display:inline-block;flex:0 0 12px;margin-top:2px}
     .qty{font-weight:normal}footer{margin-top:12px;font-size:9pt;font-weight:bold}
     .no-print{margin:0 0 12px;text-align:right}.no-print button{font-size:12pt;padding:7px 12px}
