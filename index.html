@@ -1820,7 +1820,7 @@ function showFreshStart(){
     if(over.length){const warning=document.createElement('p');warning.className='cc-fresh-note';warning.textContent=`Heads-up: ${over.length} date(s) exceed the suggested 1–2 weekday / 4–5 weekend chores. All chores are kept; none are silently dropped.`;panel.append(warning)}
     const table=document.createElement('table');table.className='cc-fresh-preview';
     const header=document.createElement('tr');['Next date','Chore','Estimated'].forEach(t=>{const th=document.createElement('th');th.textContent=t;header.append(th)});table.append(header);
-    plan.forEach(({c,date,minutes})=>{const row=document.createElement('tr');[prettyDate(date),c.title,minutes+' min'].forEach(v=>{const td=document.createElement('td');td.textContent=v;row.append(td)});table.append(row)});panel.append(table);
+    plan.forEach(({c,date,minutes})=>{const row=document.createElement('tr');[prettyDate(date),c.title+(taskRoom(c)?' — '+taskRoom(c):''),minutes+' min'].forEach(v=>{const td=document.createElement('td');td.textContent=v;row.append(td)});table.append(row)});panel.append(table);
     const note=document.createElement('p');note.className='cc-fresh-note';note.textContent='Time estimates are guesses based on chore names (5, 15, or 30 minutes), not saved chore settings. One-time tasks and daily routines are protected. Only due dates will be updated.';panel.append(note);
     const actions=document.createElement('div');actions.className='cc-fresh-actions';panel.append(actions);
     const again=document.createElement('button');again.textContent='🔀 Shuffle Again';again.onclick=()=>{variation++;render()};actions.append(again);
