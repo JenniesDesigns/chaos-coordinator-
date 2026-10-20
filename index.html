@@ -1825,16 +1825,27 @@ function showFreshStart(){
     const actions=document.createElement('div');actions.className='cc-fresh-actions';panel.append(actions);
     const again=document.createElement('button');again.textContent='🔀 Shuffle Again';again.onclick=()=>{variation++;render()};actions.append(again);
     const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.onclick=()=>overlay.remove();actions.append(cancel);
-    const apply=document.createElement('button');apply.textContent='Use This Schedule';actions.append(apply);
+    const backupButton=document.createElement('button');backupButton.textContent='⬇ Download Backup';actions.append(backupButton);
+    const apply=document.createElement('button');apply.textContent='Use This Schedule';apply.disabled=true;apply.title='Download and verify your backup first';actions.append(apply);
+    const backupNote=document.createElement('p');backupNote.className='cc-fresh-note';backupNote.textContent='First download the backup and check that chaos-coordinator-before-fresh-start.json is in your Downloads folder. Then confirm it here to enable Use This Schedule.';panel.append(backupNote);
+    const verifiedLabel=document.createElement('label');verifiedLabel.style.display='flex';verifiedLabel.style.alignItems='center';verifiedLabel.style.gap='8px';
+    const verified=document.createElement('input');verified.type='checkbox';verified.disabled=true;
+    verifiedLabel.append(verified,document.createTextNode('I checked: my backup file is saved.'));panel.append(verifiedLabel);
+    function downloadFreshBackup(){
+      const backup=JSON.stringify({created_at:new Date().toISOString(),app:'Chaos Coordinator',type:'fresh-start-before',chores:plan.map(({c})=>({id:c.id,title:c.title,due_date:c.due_date}))},null,2);
+      const url=URL.createObjectURL(new Blob([backup],{type:'application/json'}));
+      const link=document.createElement('a');link.href=url;link.download='chaos-coordinator-before-fresh-start.json';document.body.append(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),3000);
+    }
+    backupButton.onclick=()=>{downloadFreshBackup();verified.disabled=false;verified.checked=false;apply.disabled=true;backupNote.textContent='Check your Downloads folder for chaos-coordinator-before-fresh-start.json, then tick the confirmation box below.'};
+    verified.onchange=()=>{apply.disabled=!verified.checked};
     apply.onclick=async()=>{
+      if(!verified.checked)return;
       if(!plan.length){overlay.remove();return}
-      if(!confirm(`Update due dates for ${plan.length} recurring chores? This will not mark chores complete or delete them.`))return;
-      [again,cancel,apply].forEach(b=>b.disabled=true);
+      if(!confirm(`Update due dates for ${plan.length} recurring chores? You have confirmed your backup is saved. This will not mark chores complete or delete them.`))return;
+      [again,cancel,backupButton,verified,apply].forEach(b=>b.disabled=true);
       let succeeded=0;
       try{
-        // Save a local rollback record BEFORE making any changes.
-        const backup=JSON.stringify({created_at:new Date().toISOString(),app:'Chaos Coordinator',type:'fresh-start-before',chores:plan.map(({c})=>({id:c.id,title:c.title,due_date:c.due_date}))},null,2);
-        const url=URL.createObjectURL(new Blob([backup],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='chaos-coordinator-before-fresh-start.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
         for(const item of plan){
           if(item.date===item.c.due_date)continue;
           await supabaseRequest('/rest/v1/tasks?id=eq.'+encodeURIComponent(item.c.id),{method:'PATCH',headers:{'Prefer':'return=minimal'},body:JSON.stringify({due_date:item.date})});
