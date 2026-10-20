@@ -2908,7 +2908,6 @@ function printPlannerDay(){
   const today=new Date(),dayISO=typeof localDate==='string'?localDate:today.toISOString().slice(0,10);
   const due=(typeof chores!=='undefined'?chores:[]).filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=dayISO));
   const todaysEvents=(typeof events!=='undefined'?events:[]).filter(e=>String(e.event_date||'').slice(0,10)===dayISO);
-  const groceries=(typeof foodItems!=='undefined'?foodItems:[]).filter(groceryNeeded);
   const meals=(typeof mealForDate==='function'?mealForDate(dayISO):null);
   const entries=(arr,fn,limit=16)=>arr.slice(0,limit).map(v=>'<li><span class="check"></span>'+esc(fn(v))+'</li>').join('')+(arr.length>limit?'<li class="more">+ '+(arr.length-limit)+' more in the app</li>':'');
   const blank=(n=3)=>Array.from({length:n},()=>'<li class="blank"><span class="check"></span>&nbsp;</li>').join('');
@@ -2916,7 +2915,6 @@ function printPlannerDay(){
   const eventLabel=e=>[e.event_time||'',e.title||e.name||'Event'].filter(Boolean).join(' · ');
   const html='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Chaos Coordinator — My Day</title><style>'+`@page{size:letter;margin:.36in}*{box-sizing:border-box}html,body{margin:0;padding:0}body{font:10px/1.18 Arial,sans-serif;color:#151515}#printSheet{width:100%}header{display:flex;justify-content:space-between;align-items:end;border-bottom:2px solid #111;padding-bottom:5px;margin-bottom:7px}h1{font-size:19px;margin:0}header p{margin:0;font-size:10px}.grid{display:grid;grid-template-columns:1.12fr 1fr;gap:8px;align-items:start}.stack{display:flex;flex-direction:column;gap:7px;min-width:0}.panel{border:1px solid #333;border-radius:6px;padding:6px 8px;break-inside:avoid}.panel h2{font-size:11px;margin:0 0 4px;border-bottom:1px solid #bbb;padding-bottom:3px}.panel ul{list-style:none;padding:0;margin:0}.panel li{display:flex;gap:5px;align-items:baseline;min-height:16px;padding:1px 0;overflow-wrap:anywhere}.panel li.blank{border-bottom:1px solid #ddd}.panel li.more{font-style:italic;color:#555}.check{display:inline-block;flex:0 0 9px;height:9px;border:1px solid #555}.footer{margin-top:6px;text-align:center;font-size:8px;color:#555}@media print{button{display:none}#printSheet{break-inside:avoid}}`+'</style></head><body><div id="printSheet"><header><div><h1>Chaos Coordinator ♡</h1><p>You bring the chaos. We’ll coordinate it.</p></div><strong>'+esc(today.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}))+'</strong></header><div class="grid"><div class="stack">'+
     block('Today’s Mischief · Chores & To-Dos',entries(due,c=>c.title+(taskRoom(c)?' · '+taskRoom(c):''),20),3)+
-    block('Supply Run · Groceries & Errands',entries(groceries,g=>g.item+(g.quantity?' · '+g.quantity:''),12),2)+
     '</div><div class="stack">'+
     block('Dates with Destiny · Appointments',entries(todaysEvents,eventLabel),2)+
     block('Don’t Forget Your Spells · Reminders','',3)+
