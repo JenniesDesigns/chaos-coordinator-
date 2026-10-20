@@ -173,6 +173,21 @@ input,select,textarea,button{max-width:100%}
 .focus-room{font-size:20px;font-weight:900;color:var(--teal);margin:7px 0}
 @media(max-width:650px){.command-summary{gap:6px}.command-stat{padding:9px}.command-stat b{font-size:18px}}
 .season-picks{display:flex;gap:9px;flex-wrap:wrap;margin-top:7px}.season-picks label{display:flex;align-items:center;gap:4px;font-weight:500;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:9px}.season-picks input{width:auto!important;margin:0!important}.season-tag{font-size:12px;color:var(--muted)}
+
+/* v15.8: Planner-inspired dashboard, preserving existing theme and controls */
+#home .planner-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;align-items:stretch}
+#home .planner-mischief{grid-row:span 2;min-height:340px;border-color:var(--purple)}
+#home .planner-dates,#home .planner-meals{min-height:158px}
+#home .planner-extras{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 16px}
+#home .planner-extra{min-width:0;display:flex;flex-direction:column}
+#home .planner-extra .linkbtn{margin-top:auto;align-self:flex-start}
+#home .planner-note-lines{min-height:60px;margin:4px 0 12px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 25px,var(--line) 26px,var(--line) 27px)}
+#home .planner-print-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 18px;flex-wrap:wrap}
+#home #plannerDate{font-weight:700;color:var(--muted)}
+#home .planner-print-toolbar button{padding:10px 17px;border-radius:12px;border:1px solid var(--purple);background:var(--panel2);color:var(--text);font-weight:750}
+#home .planner-print-toolbar button:hover{border-color:var(--pink)}
+@media(max-width:850px){#home .planner-grid{grid-template-columns:1fr 1fr}#home .planner-mischief{grid-column:1/-1;grid-row:auto;min-height:0}#home .planner-extras{grid-template-columns:1fr 1fr}#home .planner-extras .planner-extra:last-child{grid-column:1/-1}}
+@media(max-width:600px){#home .planner-grid,#home .planner-extras{grid-template-columns:1fr}#home .planner-mischief,#home .planner-extras .planner-extra:last-child{grid-column:auto}}
 </style>
 <style>
 .savings-plan{margin-top:10px;padding:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.035)}
@@ -283,7 +298,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator{
 .dashboard-primary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:16px}
 .dashboard-secondary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:16px}
 .dash-card,.mini-dash{min-width:0}
-.dash-card #dashboardChores .today-chore:nth-child(n+4){display:none}
+.dash-card #dashboardChores .today-chore:nth-child(n+6){display:none}
 .dash-card #dashboardEvents .live-item:nth-child(n+4){display:none}
 .dash-card #dashboardMeals .dashboard-meal{display:flex}
 .mini-list{display:grid;gap:8px;margin:10px 0}
@@ -436,22 +451,28 @@ body[data-accent="red"]{--pink:#ff5c68}
     </div>
   </div>
 
-  <div class="dashboard-primary">
-    <div class="card dash-card" data-dashboard-card="chores"><h2>🧹 Chores <span>Today</span></h2>
+  <div class="dashboard-primary planner-grid">
+    <div class="card dash-card planner-mischief" data-dashboard-card="chores"><h2>🧹 Today's Mischief <span>Chores & to-dos</span></h2>
       <p class="muted">One chore at a time. No guilt, no backlog. ✦</p>
       <div id="dashboardChores" class="empty">Loading your chaos…</div>
       <button class="linkbtn" data-go="housekeeping">Housekeeping →</button>
     </div>
-    <div class="card dash-card" data-dashboard-card="calendar"><h2>📅 Coming up <span>30 days</span></h2>
+    <div class="card dash-card planner-dates" data-dashboard-card="calendar"><h2>🔮 Dates with Destiny <span>Coming up</span></h2>
       <div id="dashboardEvents" class="empty">No upcoming events.</div>
       <button class="linkbtn" data-go="calendar">Calendar →</button>
     </div>
-    <div class="card dash-card" data-dashboard-card="meals"><h2>🍴 This week's menu <span>Meal plan</span></h2>
+    <div class="card dash-card planner-meals" data-dashboard-card="meals"><h2>🍲 The Cauldron <span>This week's menu</span></h2>
       <div id="dashboardMeals" class="empty">No meals planned yet. Wing it. ✦</div>
       <button class="linkbtn" data-go="groceries">Meal Plan →</button>
     </div>
   </div>
 
+  <div class="planner-extras">
+    <div class="card planner-extra"><h2>✨ Don't Forget Your Spells <span>Reminders</span></h2><p class="muted">A little space to remember what matters.</p><div class="planner-note-lines" aria-hidden="true"></div><button class="linkbtn" data-go="calendar">Add to Calendar →</button></div>
+    <div class="card planner-extra"><h2>📞 Summon Your People <span>Calls & follow-ups</span></h2><p class="muted">People to reach out to and things to follow up on.</p><div class="planner-note-lines" aria-hidden="true"></div><button class="linkbtn" data-go="calendar">Add a reminder →</button></div>
+    <div class="card planner-extra"><h2>🛒 Supply Run <span>Groceries & errands</span></h2><div id="dashboardSupply" class="mini-list">Loading shopping list…</div><button class="linkbtn" data-go="groceries">Grocery List →</button></div>
+  </div>
+  <div class="planner-print-toolbar"><span id="plannerDate"></span><button type="button" id="printMyDay" class="primary">🖨 Print My Day</button></div>
   <div class="dashboard-secondary">
     <div class="card mini-dash" data-dashboard-card="projects"><h2>⚒ Projects <span>In motion</span></h2><div id="dashboardProjects" class="mini-list">Loading projects…</div><button class="linkbtn" data-go="projects">Projects →</button></div>
     <div class="card mini-dash" data-dashboard-card="goals"><h2>◎ Goals <span>Keep going</span></h2><div id="dashboardGoals" class="mini-list">Loading goals…</div><button class="linkbtn" data-go="goals">Goals →</button></div>
@@ -2870,6 +2891,48 @@ function installBrightPickerButtons(){
   });
 }
 document.addEventListener("DOMContentLoaded",installBrightPickerButtons);
+
+// Planner dashboard enhancements: presentation only; no database writes.
+function renderPlannerExtras(){
+  const date=document.getElementById('plannerDate');
+  if(date)date.textContent=new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const box=document.getElementById('dashboardSupply');if(!box)return;
+  box.replaceChildren();
+  const items=(typeof foodItems!=='undefined'?foodItems:[]).filter(groceryNeeded).slice(0,5);
+  if(!items.length){box.className='empty';box.textContent='Nothing on your shopping list. ✦';return}
+  box.className='mini-list';
+  items.forEach(item=>{const line=document.createElement('div');line.className='mini-line';const label=document.createElement('strong');label.textContent=item.item||'Item';const meta=document.createElement('small');meta.textContent=item.quantity||'';line.append(label,meta);box.append(line)});
+}
+function printPlannerDay(){
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const today=new Date(),dayISO=typeof localDate==='string'?localDate:today.toISOString().slice(0,10);
+  const due=(typeof chores!=='undefined'?chores:[]).filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=dayISO));
+  const todaysEvents=(typeof events!=='undefined'?events:[]).filter(e=>String(e.event_date||'').slice(0,10)===dayISO);
+  const groceries=(typeof foodItems!=='undefined'?foodItems:[]).filter(groceryNeeded);
+  const meals=(typeof mealForDate==='function'?mealForDate(dayISO):null);
+  const entries=(arr,fn,limit=16)=>arr.slice(0,limit).map(v=>'<li><span class="check"></span>'+esc(fn(v))+'</li>').join('');
+  const blank=(n=3)=>Array.from({length:n},()=>'<li class="blank"><span class="check"></span>&nbsp;</li>').join('');
+  const block=(title,contents,more=3,cls='')=>'<section class="panel '+cls+'"><h2>'+title+'</h2><ul>'+contents+blank(more)+'</ul></section>';
+  const eventLabel=e=>[e.event_time||'',e.title||e.name||'Event'].filter(Boolean).join(' · ');
+  const html='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Chaos Coordinator — My Day</title><style>'+`@page{size:letter;margin:.48in}*{box-sizing:border-box}body{font:11px/1.3 Arial,sans-serif;color:#151515;margin:0}header{display:flex;justify-content:space-between;align-items:end;border-bottom:2px solid #111;padding-bottom:9px;margin-bottom:12px}h1{font-size:23px;margin:0}header p{margin:0;font-size:12px}.grid{display:grid;grid-template-columns:1.35fr 1fr;gap:10px;align-items:start}.panel{border:1.5px solid #333;border-radius:8px;padding:9px 12px;break-inside:avoid}.panel h2{font-size:13px;margin:0 0 7px;border-bottom:1px solid #bbb;padding-bottom:5px}.panel ul{list-style:none;padding:0;margin:0}.panel li{display:flex;gap:7px;align-items:baseline;min-height:21px;padding:2px 0;overflow-wrap:anywhere}.panel li.blank{border-bottom:1px solid #ddd}.check{display:inline-block;flex:0 0 10px;height:10px;border:1px solid #555}.big{grid-row:span 2}.wide{grid-column:1/-1}.footer{margin-top:10px;text-align:center;font-size:9px;color:#555}@media print{button{display:none}}`+'</style></head><body><header><div><h1>Chaos Coordinator ♡</h1><p>You bring the chaos. We’ll coordinate it.</p></div><strong>'+esc(today.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}))+'</strong></header><div class="grid">'+
+    block('Today’s Mischief · Chores & To-Dos',entries(due,c=>c.title+(taskRoom(c)?' · '+taskRoom(c):''),20),6,'big')+
+    block('Dates with Destiny · Appointments',entries(todaysEvents,eventLabel),3)+
+    block('Don’t Forget Your Spells · Reminders','',4)+
+    block('Summon Your People · Calls & Follow-Ups','',4)+
+    block('Supply Run · Groceries & Errands',entries(groceries,g=>g.item+(g.quantity?' · '+g.quantity:''),12),3)+
+    block('The Cauldron · Meals',meals?.meal?'<li>'+esc(meals.meal)+'</li>':'',3,'wide')+
+    '</div><div class="footer">Coordinated-ish — because perfect was never the goal. · Blank lines are for handwritten additions.</div></body></html>';
+  const win=window.open('','_blank','width=850,height=950');
+  if(!win){toast('Allow pop-ups to print your planner.');return}
+  win.document.open();win.document.write(html);win.document.close();win.focus();
+  setTimeout(()=>win.print(),300);
+}
+const printMyDayButton=document.getElementById('printMyDay');
+if(printMyDayButton)printMyDayButton.addEventListener('click',printPlannerDay);
+// Update the planner's grocery preview when the dashboard is rendered.
+const originalRenderLiveDashboard=renderLiveDashboard;
+renderLiveDashboard=function(){originalRenderLiveDashboard();renderPlannerExtras()};
+renderPlannerExtras();
 </script>
 </body>
 </html>
