@@ -188,6 +188,20 @@ input,select,textarea,button{max-width:100%}
 #home .planner-print-toolbar button:hover{border-color:var(--pink)}
 @media(max-width:850px){#home .planner-grid{grid-template-columns:1fr 1fr}#home .planner-mischief{grid-column:1/-1;grid-row:auto;min-height:0}#home .planner-extras{grid-template-columns:1fr 1fr}#home .planner-extras .planner-extra:last-child{grid-column:1/-1}}
 @media(max-width:600px){#home .planner-grid,#home .planner-extras{grid-template-columns:1fr}#home .planner-mischief,#home .planner-extras .planner-extra:last-child{grid-column:auto}}
+
+/* v15.8.4: chore dashboard fills available card; preview-only until confirmed */
+#home .planner-mischief{display:flex;flex-direction:column}
+#home .planner-mischief #dashboardChores{flex:1;align-content:start}
+#home .fresh-start-actions{margin-top:12px}
+.cc-fresh-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:14px}
+.cc-fresh-panel{width:min(660px,100%);max-height:90vh;overflow:auto;background:var(--panel);color:var(--text);border:1px solid var(--purple);border-radius:16px;padding:20px;box-shadow:0 18px 60px #0008}
+.cc-fresh-panel h2{margin:0 0 8px}.cc-fresh-panel p{line-height:1.5}
+.cc-fresh-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.cc-fresh-actions button{padding:9px 13px;border-radius:9px;border:1px solid var(--purple);background:var(--panel2);color:var(--text);cursor:pointer}
+.cc-fresh-actions button:disabled{opacity:.5;cursor:wait}
+.cc-fresh-preview{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+.cc-fresh-preview td,.cc-fresh-preview th{padding:7px 5px;border-bottom:1px solid var(--line);text-align:left}
+.cc-fresh-note{font-size:12px;color:var(--muted)}
 </style>
 <style>
 .savings-plan{margin-top:10px;padding:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.035)}
@@ -455,6 +469,7 @@ body[data-accent="red"]{--pink:#ff5c68}
     <div class="card dash-card planner-mischief" data-dashboard-card="chores"><h2>🧹 Today's Mischief <span>Chores & to-dos</span></h2>
       <p class="muted">One chore at a time. No guilt, no backlog. ✦</p>
       <div id="dashboardChores" class="empty">Loading your chaos…</div>
+      <div class="fresh-start-actions"><button type="button" id="previewFreshStart" class="linkbtn">✨ Fresh Start · Preview Shuffle</button></div>
       <button class="linkbtn" data-go="housekeeping">Housekeeping →</button>
     </div>
     <div class="card dash-card planner-dates" data-dashboard-card="calendar"><h2>🔮 Dates with Destiny <span>Coming up</span></h2>
@@ -1747,11 +1762,92 @@ document.getElementById("choreEditForm").addEventListener("submit",async e=>{
 });
 function renderDashboardChores(){
   const target=document.getElementById("dashboardChores");if(!target)return;
-  const due=chores.filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=localDate)).slice(0,5);target.innerHTML="";
+  const due=chores.filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=localDate)).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));target.innerHTML="";
   if(!due.length){target.className="empty";target.textContent="Nothing due. The goblin approves. ✦";return}
-  target.className="today-chore-list";due.forEach(c=>{const d=document.createElement("div");d.className="today-chore";const x=document.createElement("input");x.type="checkbox";x.className="chore-check";const s=document.createElement("span");s.textContent=c.title+(taskRoom(c)?" · "+taskRoom(c):"");x.addEventListener("change",()=>{const row=choreRow(c),box=row.querySelector(".chore-check");box.checked=true;box.dispatchEvent(new Event("change"))});d.append(x,s);target.append(d)})
+  target.className="today-chore-list";due.slice(0,12).forEach(c=>{const d=document.createElement("div");d.className="today-chore";const x=document.createElement("input");x.type="checkbox";x.className="chore-check";const s=document.createElement("span");s.textContent=c.title+(taskRoom(c)?" · "+taskRoom(c):"");x.addEventListener("change",()=>{const row=choreRow(c),box=row.querySelector(".chore-check");box.checked=true;box.dispatchEvent(new Event("change"))});d.append(x,s);target.append(d)});if(due.length>12){const more=document.createElement("small");more.className="muted";more.textContent="+"+(due.length-12)+" more due · See Housekeeping or use Fresh Start";target.append(more)}
 }
 
+
+
+// v15.8.4 Fresh Start: preview first, no deletions or false completions.
+// Deliberately leaves daily/every-other-day essentials, completed and one-time tasks alone.
+const freshEffortMinutes={quick:5,regular:15,big:30};
+function freshEstimate(c){return freshEffortMinutes[choreEffort(c.title)]||15}
+function freshDate(offset){return dateAt(offset)}
+function freshShufflePlan(variation=0){
+  const eligible=chores.filter(c=>!c.completed&&!['none','daily','every_other_day'].includes(taskRepeat(c)));
+  const periods={weekly:7,biweekly:14,monthly:30,quarterly:90,semiannual:182,yearly:365};
+  const workload=new Map();
+  // Only reshuffle recurring chores; preserve intentionally dated one-off tasks and daily essentials.
+  const fixed=chores.filter(c=>!eligible.includes(c)&&!c.completed);
+  fixed.forEach(c=>{if(c.due_date&&c.due_date>=localDate&&c.due_date<=freshDate(89))workload.set(c.due_date,(workload.get(c.due_date)||0)+freshEstimate(c))});
+  const plan=[];
+  // Most frequent chores get first choice of their next occurrence.
+  eligible.sort((a,b)=>(periods[taskRepeat(a)]||365)-(periods[taskRepeat(b)]||365)||String(a.title).localeCompare(String(b.title)));
+  eligible.forEach((c,index)=>{
+    const repeat=taskRepeat(c),windowDays=Math.min(periods[repeat]||90,90);
+    let best=null,bestScore=Infinity;
+    for(let offset=0;offset<windowDays;offset++){
+      const day=freshDate(offset);
+      if(!activeSeason(c,day))continue;
+      const weekend=[0,6].includes(new Date(day+'T12:00:00').getDay());
+      const existing=workload.get(day)||0;
+      const cap=weekend?100:30; // 1–2 short jobs on weekdays; more on weekends.
+      const effort=freshEstimate(c);
+      const over=Math.max(0,existing+effort-cap);
+      const score=over*12+existing*.35+(weekend?-8:5)+(effort>=30&&!weekend?20:0)+offset*.025+((index*17+offset*13+variation*19)%11)*.08;
+      if(score<bestScore){bestScore=score;best=day}
+    }
+    if(!best){ // Out-of-season chores move to the first valid season, without being deleted.
+      for(let offset=90;offset<370;offset++){const d=freshDate(offset);if(activeSeason(c,d)){best=d;break}}
+    }
+    if(best){workload.set(best,(workload.get(best)||0)+freshEstimate(c));plan.push({c,date:best,minutes:freshEstimate(c)})}
+  });
+  return plan.sort((a,b)=>a.date.localeCompare(b.date)||a.c.title.localeCompare(b.c.title));
+}
+function showFreshStart(){
+  if(!currentUser){toast('Please sign in first.');return}
+  const overlay=document.createElement('div');overlay.className='cc-fresh-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');
+  const panel=document.createElement('div');panel.className='cc-fresh-panel';overlay.append(panel);
+  let variation=0,plan=[];
+  function render(){
+    plan=freshShufflePlan(variation);
+    panel.replaceChildren();
+    const h=document.createElement('h2');h.textContent='✨ Fresh Start · Shuffle Preview';panel.append(h);
+    const intro=document.createElement('p');intro.textContent=`Preview ${plan.length} recurring chore dates. Daily essentials, every-other-day chores, completed chores, and one-time tasks stay unchanged. Nothing changes until you confirm.`;panel.append(intro);
+    const counts=new Map();plan.forEach(x=>counts.set(x.date,(counts.get(x.date)||0)+1));
+    const over=[...new Set(plan.filter(x=>{const weekday=new Date(x.date+'T12:00:00').getDay();return (counts.get(x.date)||0)>(weekday===0||weekday===6?5:2)}).map(x=>x.date))];
+    if(over.length){const warning=document.createElement('p');warning.className='cc-fresh-note';warning.textContent=`Heads-up: ${over.length} date(s) exceed the suggested 1–2 weekday / 4–5 weekend chores. All chores are kept; none are silently dropped.`;panel.append(warning)}
+    const table=document.createElement('table');table.className='cc-fresh-preview';
+    const header=document.createElement('tr');['Next date','Chore','Estimated'].forEach(t=>{const th=document.createElement('th');th.textContent=t;header.append(th)});table.append(header);
+    plan.forEach(({c,date,minutes})=>{const row=document.createElement('tr');[prettyDate(date),c.title,minutes+' min'].forEach(v=>{const td=document.createElement('td');td.textContent=v;row.append(td)});table.append(row)});panel.append(table);
+    const note=document.createElement('p');note.className='cc-fresh-note';note.textContent='Time estimates are guesses based on chore names (5, 15, or 30 minutes), not saved chore settings. One-time tasks and daily routines are protected. Only due dates will be updated.';panel.append(note);
+    const actions=document.createElement('div');actions.className='cc-fresh-actions';panel.append(actions);
+    const again=document.createElement('button');again.textContent='🔀 Shuffle Again';again.onclick=()=>{variation++;render()};actions.append(again);
+    const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.onclick=()=>overlay.remove();actions.append(cancel);
+    const apply=document.createElement('button');apply.textContent='Use This Schedule';actions.append(apply);
+    apply.onclick=async()=>{
+      if(!plan.length){overlay.remove();return}
+      if(!confirm(`Update due dates for ${plan.length} recurring chores? This will not mark chores complete or delete them.`))return;
+      [again,cancel,apply].forEach(b=>b.disabled=true);
+      let succeeded=0;
+      try{
+        // Save a local rollback record BEFORE making any changes.
+        const backup=JSON.stringify({created_at:new Date().toISOString(),app:'Chaos Coordinator',type:'fresh-start-before',chores:plan.map(({c})=>({id:c.id,title:c.title,due_date:c.due_date}))},null,2);
+        const url=URL.createObjectURL(new Blob([backup],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='chaos-coordinator-before-fresh-start.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+        for(const item of plan){
+          if(item.date===item.c.due_date)continue;
+          await supabaseRequest('/rest/v1/tasks?id=eq.'+encodeURIComponent(item.c.id),{method:'PATCH',headers:{'Prefer':'return=minimal'},body:JSON.stringify({due_date:item.date})});
+          succeeded++;
+        }
+        await loadChores();overlay.remove();toast('Fresh Start saved. Your chores have new dates!');
+      }catch(err){console.error('Fresh Start update failed',err);await loadChores();overlay.remove();toast('Fresh Start stopped after '+succeeded+' updates. Keep your downloaded backup and contact us before retrying.')}
+    };
+  }
+  render();document.body.append(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
+}
+document.getElementById('previewFreshStart')?.addEventListener('click',showFreshStart);
 
 // ---- Projects (v10) ----
 let projects=[],projectFilter="open";
@@ -2914,13 +3010,13 @@ function printPlannerDay(){
   const block=(title,contents,more=3,cls='')=>'<section class="panel '+cls+'"><h2>'+title+'</h2><ul>'+contents+blank(more)+'</ul></section>';
   const eventLabel=e=>[e.event_time||'',e.title||e.name||'Event'].filter(Boolean).join(' · ');
   const html='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Chaos Coordinator — My Day</title><style>'+`@page{size:letter;margin:.36in}*{box-sizing:border-box}html,body{margin:0;padding:0}body{font:10px/1.18 Arial,sans-serif;color:#151515}#printSheet{width:100%}header{display:flex;justify-content:space-between;align-items:end;border-bottom:2px solid #111;padding-bottom:5px;margin-bottom:7px}h1{font-size:19px;margin:0}header p{margin:0;font-size:10px}.grid{display:grid;grid-template-columns:1.12fr 1fr;gap:8px;align-items:start}.stack{display:flex;flex-direction:column;gap:7px;min-width:0}.panel{border:1px solid #333;border-radius:6px;padding:6px 8px;break-inside:avoid}.panel h2{font-size:11px;margin:0 0 4px;border-bottom:1px solid #bbb;padding-bottom:3px}.panel ul{list-style:none;padding:0;margin:0}.panel li{display:flex;gap:5px;align-items:baseline;min-height:16px;padding:1px 0;overflow-wrap:anywhere}.panel li.blank{border-bottom:1px solid #ddd}.panel li.more{font-style:italic;color:#555}.check{display:inline-block;flex:0 0 9px;height:9px;border:1px solid #555}.footer{margin-top:6px;text-align:center;font-size:8px;color:#555}@media print{button{display:none}#printSheet{break-inside:avoid}}`+'</style></head><body><div id="printSheet"><header><div><h1>Chaos Coordinator ♡</h1><p>You bring the chaos. We’ll coordinate it.</p></div><strong>'+esc(today.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}))+'</strong></header><div class="grid"><div class="stack">'+
-    block('Today’s Mischief · Chores & To-Dos',entries(due,c=>c.title+(taskRoom(c)?' · '+taskRoom(c):''),20),3)+
+    block('Today’s Mischief · Chores & To-Dos',entries(due,c=>c.title+(taskRoom(c)?' · '+taskRoom(c):''),due.length),3)+
     '</div><div class="stack">'+
     block('Dates with Destiny · Appointments',entries(todaysEvents,eventLabel),2)+
     block('Don’t Forget Your Spells · Reminders','',3)+
     block('Summon Your People · Calls & Follow-Ups','',3)+
     block('The Cauldron · Meals',meals?.meal?'<li>'+esc(meals.meal)+'</li>':'',2)+
-    '</div></div><div class="footer">Coordinated-ish — because perfect was never the goal. · Blank lines are for handwritten additions.</div></div><script>window.addEventListener("load",function(){var sheet=document.getElementById("printSheet");var maxHeight=10.15*96;var actual=sheet.getBoundingClientRect().height;if(actual>maxHeight){var factor=Math.max(.55,maxHeight/actual*.97);sheet.style.zoom=String(factor)}});<\/script></body></html>';
+    '</div></div><div class="footer">Coordinated-ish — because perfect was never the goal. · Blank lines are for handwritten additions.</div></div><script>window.addEventListener("load",function(){var sheet=document.getElementById("printSheet");var maxHeight=(11-.72)*96;var actual=sheet.getBoundingClientRect().height;if(actual>maxHeight){var factor=maxHeight/actual*.96;sheet.style.zoom=String(factor)}});<\/script></body></html>';
   const win=window.open('','_blank','width=850,height=950');
   if(!win){toast('Allow pop-ups to print your planner.');return}
   win.document.open();win.document.write(html);win.document.close();win.focus();
