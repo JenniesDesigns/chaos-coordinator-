@@ -1725,9 +1725,39 @@ async function migrateLegacyChores(){
     try{await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({room_id:room.id,recurrence:taskRepeat(c),area})});c.room_id=room.id;c.recurrence=taskRepeat(c);c.area=area}catch(err){console.error("Legacy chore migration failed",c.id,err)}
   }
 }
+// v15.8.9: Catch up missed daily and every-other-day chores without marking them done.
+// Preserve the two-day cadence for every-other-day chores; do not change other recurrences.
+async function catchUpRoutineChores(){
+  let failed=0;
+  for(const c of chores){
+    if(c.completed || !c.due_date || c.due_date>=localDate)continue;
+    const repeat=taskRepeat(c);
+    if(repeat!=="daily" && repeat!=="every_other_day")continue;
+    let newDate=localDate;
+    if(repeat==="every_other_day"){
+      const start=new Date(c.due_date+"T12:00:00");
+      const end=new Date(localDate+"T12:00:00");
+      const days=Math.round((end-start)/86400000);
+      if(!Number.isFinite(days)||days<0)continue;
+      const steps=Math.ceil(days/2);
+      start.setDate(start.getDate()+steps*2);
+      newDate=`${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,"0")}-${String(start.getDate()).padStart(2,"0")}`;
+    }
+    if(newDate===c.due_date)continue;
+    try{
+      await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({due_date:newDate})});
+      c.due_date=newDate;
+    }catch(err){failed++;console.error("Routine chore catch-up failed",c.id,err)}
+  }
+  if(failed)toast("Some routine chore dates couldn't be updated. Please try reloading later.");
+}
 async function loadChores(){
-  try{const data=await supabaseRequest("/rest/v1/tasks?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});chores=Array.isArray(data)?data:[];renderChores()}
-  catch(err){console.error(err);toast("Couldn't load your chores.")}
+  try{
+    const data=await supabaseRequest("/rest/v1/tasks?select=*&order=due_date.asc",{headers:{"Accept":"application/json"}});
+    chores=Array.isArray(data)?data:[];
+    await catchUpRoutineChores();
+    renderChores();
+  }catch(err){console.error(err);toast("Couldn't load your chores.")}
 }
 choreForm.addEventListener("submit",async e=>{
   e.preventDefault();if(!currentUser){toast("Please sign in first.");return}
