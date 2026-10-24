@@ -2153,17 +2153,33 @@ function foodEntryRow(i){
   const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeFood(i));actions.append(del);
   row.append(main,actions);return row;
 }
+// v15.8.10: Remember expanded grocery categories across list refreshes.
+const foodOpenCategories={grocery:new Set(),pantry:new Set(),fridge:new Set(),freezer:new Set()};
 function renderFood(){
   const list=document.getElementById("foodList");
+  const currentOpen=foodOpenCategories[list.dataset.renderedFoodTab||foodTab]||(foodOpenCategories[list.dataset.renderedFoodTab||foodTab]=new Set());
+  list.querySelectorAll("details.cc-group").forEach(details=>{
+    const category=details.dataset.foodCategory;
+    if(!category)return;
+    if(details.open)currentOpen.add(category);else currentOpen.delete(category);
+  });
   let shown=foodTab==="grocery"?foodItems.filter(groceryNeeded):foodItems.filter(i=>i.location===foodTab);
   shown=shown.slice().sort((a,b)=>foodCategory(a).localeCompare(foodCategory(b))||Number(b.staple)-Number(a.staple)||(a.item||"").localeCompare(b.item||""));
   document.getElementById("foodCount").textContent=foodItems.length+" item"+(foodItems.length===1?"":"s");
   list.innerHTML="";
+  list.dataset.renderedFoodTab=foodTab;
   if(!shown.length){list.className="empty";list.textContent=foodTab==="grocery"?"Your grocery list is gloriously empty. ✦":"Nothing tracked here yet—and that's allowed. ✦";return}
   list.className="";
   const groups=new Map();shown.forEach(i=>{const cat=foodCategory(i);if(!groups.has(cat))groups.set(cat,[]);groups.get(cat).push(i)});
   [...groups.entries()].sort(([a],[b])=>a.localeCompare(b)).forEach(([cat,items])=>{
-    const details=document.createElement("details");details.className="cc-group";
+    const details=document.createElement("details");details.className="cc-group";details.dataset.foodCategory=cat;
+    const openCategories=foodOpenCategories[foodTab]||(foodOpenCategories[foodTab]=new Set());
+    details.open=openCategories.has(cat);
+    details.addEventListener("toggle",()=>{
+      // Ignore delayed toggle events from category rows already removed by a refresh.
+      if(!details.isConnected)return;
+      if(details.open)openCategories.add(cat);else openCategories.delete(cat);
+    });
     const summary=document.createElement("summary"),name=document.createElement("span"),count=document.createElement("span");
     name.textContent=cat;count.className="cc-group-count";count.textContent=items.length+" item"+(items.length===1?"":"s");summary.append(name,count);
     const body=document.createElement("div");body.className="cc-group-body";items.forEach(i=>body.append(foodEntryRow(i)));
@@ -2214,7 +2230,15 @@ document.getElementById("foodForm").addEventListener("submit",async e=>{
   try{await supabaseRequest("/rest/v1/groceries",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,item,quantity:quantity||null,purchased:false,location,stock_status,staple,category,notes:null,updated_at:new Date().toISOString()})});document.getElementById("foodForm").reset();delete document.getElementById("foodCategorySelect").dataset.manuallyChosen;document.getElementById("foodCategorySelect").value="Other";document.getElementById("foodLocation").value="grocery";document.getElementById("foodStatus").value="out";await loadFood();toast("Added. Grocery goblin has it. ✦")}
   catch(err){console.error(err);toast("Couldn't add that item: "+(err.message||"unknown error"))}
 });
-document.querySelectorAll("[data-food-tab]").forEach(b=>b.addEventListener("click",()=>{foodTab=b.dataset.foodTab;document.querySelectorAll("[data-food-tab]").forEach(x=>x.classList.toggle("active",x===b));renderFood()}));
+document.querySelectorAll("[data-food-tab]").forEach(b=>b.addEventListener("click",()=>{
+  const openCategories=foodOpenCategories[foodTab]||(foodOpenCategories[foodTab]=new Set());
+  document.querySelectorAll("#foodList details.cc-group").forEach(details=>{
+    const cat=details.dataset.foodCategory;
+    if(cat){if(details.open)openCategories.add(cat);else openCategories.delete(cat)}
+  });
+  foodTab=b.dataset.foodTab;
+  document.querySelectorAll("[data-food-tab]").forEach(x=>x.classList.toggle("active",x===b));renderFood();
+}));
 async function setFoodStatus(i,status){
   try{await supabaseRequest("/rest/v1/groceries?id=eq."+encodeURIComponent(i.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({stock_status:status,purchased:false,updated_at:new Date().toISOString()})});await loadFood();if(status==="low"||status==="out")toast(i.item+" added to the grocery list. 🛒")}
   catch(err){console.error(err);toast("Couldn't update that item.")}
