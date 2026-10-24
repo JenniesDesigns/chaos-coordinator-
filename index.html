@@ -202,6 +202,19 @@ input,select,textarea,button{max-width:100%}
 .cc-fresh-preview{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
 .cc-fresh-preview td,.cc-fresh-preview th{padding:7px 5px;border-bottom:1px solid var(--line);text-align:left}
 .cc-fresh-note{font-size:12px;color:var(--muted)}
+
+/* v15.8.11: dashboard reminders */
+.cc-reminder-form{display:flex;flex-direction:column;gap:7px;margin:8px 0 14px}
+.cc-reminder-form input{width:100%;min-width:0;box-sizing:border-box}
+.cc-reminder-form .primary{align-self:flex-start}
+.cc-reminder-list{display:flex;flex-direction:column;gap:8px;max-height:310px;overflow:auto}
+.cc-reminder-item{display:flex;align-items:flex-start;gap:8px;border-bottom:1px solid var(--line);padding:7px 0}
+.cc-reminder-item>input{margin-top:5px;flex-shrink:0}
+.cc-reminder-body{flex:1;min-width:0;overflow-wrap:anywhere}
+.cc-reminder-body small{display:block;opacity:.75;margin-top:3px}
+.cc-reminder-actions{display:flex;gap:5px;flex-wrap:wrap}
+.cc-reminder-actions button{font-size:12px;padding:4px 6px}
+.cc-reminder-completed .cc-reminder-body{text-decoration:line-through;opacity:.7}
 </style>
 <style>
 .savings-plan{margin-top:10px;padding:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.035)}
@@ -483,7 +496,11 @@ body[data-accent="red"]{--pink:#ff5c68}
   </div>
 
   <div class="planner-extras">
-    <div class="card planner-extra"><h2>✨ Don't Forget Your Spells <span>Reminders</span></h2><p class="muted">A little space to remember what matters.</p><div class="planner-note-lines" aria-hidden="true"></div><button class="linkbtn" data-go="calendar">Add to Calendar →</button></div>
+    <div class="card planner-extra cc-reminders"><h2>✨ Don't Forget Your Spells <span>Reminders</span></h2><p class="muted">Little things, safely remembered.</p>
+      <form id="reminderAddForm" class="cc-reminder-form"><input id="reminderTitle" type="text" maxlength="300" placeholder="What do you need to remember?" aria-label="Reminder" required><label class="muted" for="reminderDue">Due date (optional)</label><input id="reminderDue" type="date"><button class="primary" type="submit">+ Add reminder</button></form>
+      <div id="reminderActiveList" class="cc-reminder-list" aria-live="polite"><p class="muted">Loading reminders…</p></div>
+      <button type="button" id="reminderCompletedToggle" class="linkbtn" aria-expanded="false">Show Completed (0)</button><div id="reminderCompletedList" class="cc-reminder-list" hidden></div>
+    </div>
     <div class="card planner-extra"><h2>📞 Summon Your People <span>Calls & follow-ups</span></h2><p class="muted">People to reach out to and things to follow up on.</p><div class="planner-note-lines" aria-hidden="true"></div><button class="linkbtn" data-go="calendar">Add a reminder →</button></div>
     <div class="card planner-extra"><h2>🛒 Supply Run <span>Groceries & errands</span></h2><div id="dashboardSupply" class="mini-list">Loading shopping list…</div><button class="linkbtn" data-go="groceries">Grocery List →</button></div>
   </div>
@@ -2988,13 +3005,70 @@ async function doSignIn(){
 authForm.addEventListener("submit",e=>{e.preventDefault();doSignIn();});
 createSubmit.addEventListener("click",e=>{e.preventDefault();doCreateAccount();});
 
+
+// v15.8.11 — Supabase-backed dashboard reminders (separate from Calendar).
+let ccReminders=[];
+let ccShowCompleted=false;
+function ccReminderButton(label,action){const b=document.createElement("button");b.type="button";b.className="linkbtn";b.textContent=label;b.addEventListener("click",action);return b;}
+function ccRenderReminders(){
+  const active=document.getElementById("reminderActiveList"),completed=document.getElementById("reminderCompletedList"),toggle=document.getElementById("reminderCompletedToggle");
+  if(!active)return;
+  active.replaceChildren();completed.replaceChildren();
+  const open=ccReminders.filter(r=>!r.completed).sort((a,b)=>(a.due_date||"9999-12-31").localeCompare(b.due_date||"9999-12-31")||(a.created_at||"").localeCompare(b.created_at||""));
+  const done=ccReminders.filter(r=>r.completed).sort((a,b)=>(b.completed_at||"").localeCompare(a.completed_at||""));
+  if(!open.length){const p=document.createElement("p");p.className="muted";p.textContent="All clear. No active spells! ✦";active.append(p);}
+  open.forEach(r=>ccReminderRow(r,active));done.forEach(r=>ccReminderRow(r,completed));
+  toggle.textContent=(ccShowCompleted?"Hide":"Show")+" Completed ("+done.length+")";
+  toggle.setAttribute("aria-expanded",String(ccShowCompleted));completed.hidden=!ccShowCompleted;
+}
+function ccReminderRow(r,container){
+  const row=document.createElement("div");row.className="cc-reminder-item"+(r.completed?" cc-reminder-completed":"");
+  const check=document.createElement("input");check.type="checkbox";check.checked=!!r.completed;check.setAttribute("aria-label",(r.completed?"Mark incomplete: ":"Complete: ")+r.title);
+  check.addEventListener("change",async()=>{check.disabled=true;try{await ccPatchReminder(r.id,{completed:check.checked,completed_at:check.checked?new Date().toISOString():null});}catch(e){check.checked=!check.checked;check.disabled=false;}});
+  const body=document.createElement("div");body.className="cc-reminder-body";const name=document.createElement("span");name.textContent=r.title;body.append(name);
+  if(r.due_date){const date=document.createElement("small");date.textContent="Due "+r.due_date;body.append(date);}
+  const actions=document.createElement("div");actions.className="cc-reminder-actions";
+  actions.append(ccReminderButton("Edit",()=>ccEditReminder(r)),ccReminderButton("Delete",()=>ccDeleteReminder(r)));
+  row.append(check,body,actions);container.append(row);
+}
+async function ccLoadReminders(){
+  if(!currentUser)return;
+  try{const rows=await supabaseRequest("/rest/v1/reminders?select=*&order=created_at.asc",{headers:{"Accept":"application/json"}});ccReminders=Array.isArray(rows)?rows:[];ccRenderReminders();}
+  catch(e){console.error("Reminders load failed",e);const list=document.getElementById("reminderActiveList");if(list)list.textContent="Could not load reminders. Check the table permissions.";}
+}
+async function ccPatchReminder(id,changes){
+  try{await supabaseRequest("/rest/v1/reminders?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(changes)});await ccLoadReminders();}
+  catch(e){console.error(e);toast("Couldn't update reminder: "+(e.message||"Unknown error"));throw e;}
+}
+async function ccEditReminder(r){
+  const title=prompt("Edit reminder:",r.title);if(title===null)return;
+  const clean=title.trim();if(!clean){toast("Reminder cannot be blank.");return;}
+  const due=prompt("Due date (YYYY-MM-DD), or leave blank for no date:",r.due_date||"");if(due===null)return;
+  const date=due.trim();if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date)){toast("Use YYYY-MM-DD for the date.");return;}
+  try{await ccPatchReminder(r.id,{title:clean,due_date:date||null});toast("Reminder updated. ✦");}catch(e){}
+}
+async function ccDeleteReminder(r){
+  if(!confirm("Delete reminder: "+r.title+"?"))return;
+  try{await supabaseRequest("/rest/v1/reminders?id=eq."+encodeURIComponent(r.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await ccLoadReminders();toast("Reminder deleted.");}
+  catch(e){console.error(e);toast("Couldn't delete reminder.");}
+}
+document.getElementById("reminderAddForm").addEventListener("submit",async e=>{
+  e.preventDefault();if(!currentUser)return;
+  const title=document.getElementById("reminderTitle").value.trim(),due=document.getElementById("reminderDue").value;
+  if(!title)return;const btn=e.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;
+  try{await supabaseRequest("/rest/v1/reminders",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,due_date:due||null})});e.currentTarget.reset();await ccLoadReminders();toast("Reminder saved. ✦");}
+  catch(err){console.error(err);toast("Couldn't save reminder: "+(err.message||"Unknown error"));}
+  finally{btn.disabled=false;}
+});
+document.getElementById("reminderCompletedToggle").addEventListener("click",()=>{ccShowCompleted=!ccShowCompleted;ccRenderReminders();});
+
 async function startApp(user){
   currentUser=user;
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
   await loadSpaces();
   await loadUserSettings();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings(),loadSpending()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings(),loadSpending(),ccLoadReminders()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
@@ -3002,7 +3076,7 @@ async function startApp(user){
 
 document.getElementById("signOutBtn").addEventListener("click",()=>{
   clearSession();
-  currentUser=null; events=[]; goals=[]; chores=[]; mealPlans=[]; renderEvents(); renderGoals(); renderChores();
+  currentUser=null; ccReminders=[];ccRenderReminders(); events=[]; goals=[]; chores=[]; mealPlans=[]; renderEvents(); renderGoals(); renderChores();
   authForm.reset(); setAuthMessage(""); authGate.style.display="grid";
 });
 document.getElementById("mobileSignOutBtn").addEventListener("click",()=>{
@@ -3018,7 +3092,7 @@ async function refreshCloudView(){
   ccLastCloudRefresh=now;
   await loadSpaces();
   await loadUserSettings();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings(),loadSpending()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings(),loadSpending(),ccLoadReminders()]);
   await loadHousekeepingSettings();
   renderLiveDashboard();
 }
