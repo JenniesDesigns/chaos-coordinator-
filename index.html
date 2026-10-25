@@ -204,6 +204,12 @@ input,select,textarea,button{max-width:100%}
 .cc-fresh-note{font-size:12px;color:var(--muted)}
 
 
+
+/* v15.8.16: dashboard groceries share the existing grocery list and purchase behavior */
+.cc-dashboard-groceries #dashboardGroceryInput{width:100%;min-width:0;color:#fff!important;caret-color:#fff;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 2px;outline-offset:2px}
+.cc-dashboard-groceries #dashboardGroceryInput:focus{border-bottom:2px solid var(--pink)}
+.cc-dashboard-groceries #dashboardGroceryInput::placeholder{color:rgba(255,255,255,.72)}
+
 /* v15.8.15: Calls are a separate twin of Reminders. */
 #callCompletedList[hidden]{display:none!important}
 .cc-calls #callTitle{color:#fff!important;caret-color:#fff;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 2px;box-shadow:none;outline-offset:2px}
@@ -522,7 +528,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <div id="callActiveList" class="cc-reminder-list" aria-live="polite"><p class="muted">Loading calls…</p></div>
       <button type="button" id="callCompletedToggle" class="linkbtn" aria-expanded="false">Show Completed (0)</button><div id="callCompletedList" class="cc-reminder-list" hidden></div>
     </div>
-    <div class="card planner-extra"><h2>🛒 Supply Run <span>Groceries & errands</span></h2><div id="dashboardSupply" class="mini-list">Loading shopping list…</div><button class="linkbtn" data-go="groceries">Grocery List →</button></div>
+    <div class="card planner-extra cc-dashboard-groceries"><h2>🛒 Supply Run <span>Groceries & errands</span></h2><form id="dashboardGroceryForm" class="cc-reminder-form"><input id="dashboardGroceryInput" maxlength="120" aria-label="Quick add grocery item" placeholder="Add a grocery item, press Enter…" required autocomplete="off"></form><div id="dashboardSupply" class="cc-reminder-list" aria-live="polite">Loading shopping list…</div><button class="linkbtn" data-go="groceries">Grocery List →</button></div>
   </div>
   <div class="planner-print-toolbar"><span id="plannerDate"></span><button type="button" id="printMyDay" class="primary">🖨 Print My Day</button></div>
   <div class="dashboard-secondary">
@@ -2257,7 +2263,7 @@ function printGroceryList(){
 document.getElementById("printGroceryList").addEventListener("click",printGroceryList);
 
 async function loadFood(){
-  try{const data=await supabaseRequest("/rest/v1/groceries?select=*&order=created_at.desc",{headers:{"Accept":"application/json"}});foodItems=Array.isArray(data)?data:[];renderFood()}
+  try{const data=await supabaseRequest("/rest/v1/groceries?select=*&order=created_at.desc",{headers:{"Accept":"application/json"}});foodItems=Array.isArray(data)?data:[];renderFood();renderPlannerExtras()}
   catch(err){console.error(err);toast("Couldn't load food & groceries.")}
 }
 document.getElementById("foodForm").addEventListener("submit",async e=>{
@@ -3248,11 +3254,37 @@ function renderPlannerExtras(){
   if(date)date.textContent=new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   const box=document.getElementById('dashboardSupply');if(!box)return;
   box.replaceChildren();
-  const items=(typeof foodItems!=='undefined'?foodItems:[]).filter(groceryNeeded).slice(0,5);
-  if(!items.length){box.className='empty';box.textContent='Nothing on your shopping list. ✦';return}
-  box.className='mini-list';
-  items.forEach(item=>{const line=document.createElement('div');line.className='mini-line';const label=document.createElement('strong');label.textContent=item.item||'Item';const meta=document.createElement('small');meta.textContent=item.quantity||'';line.append(label,meta);box.append(line)});
+  const items=(typeof foodItems!=='undefined'?foodItems:[]).filter(groceryNeeded);
+  if(!items.length){const p=document.createElement('p');p.className='muted';p.textContent='Nothing on your shopping list. ✦';box.append(p);return;}
+  items.forEach(item=>{
+    const row=document.createElement('div');row.className='cc-reminder-item';
+    const check=document.createElement('input');check.type='checkbox';check.setAttribute('aria-label','Bought '+item.item);
+    check.addEventListener('change',async()=>{check.disabled=true;await markFoodBought(item);check.disabled=false;});
+    const body=document.createElement('div');body.className='cc-reminder-body';body.textContent=item.item;
+    if(item.quantity){const qty=document.createElement('small');qty.textContent=item.quantity;body.append(qty);}
+    const actions=document.createElement('div');actions.className='cc-reminder-actions';
+    actions.append(ccReminderButton('Edit',()=>ccEditDashboardGrocery(item)),ccReminderButton('Delete',()=>removeFood(item)));
+    row.append(check,body,actions);box.append(row);
+  });
 }
+async function ccEditDashboardGrocery(item){
+  const changed=prompt('Edit grocery item:',item.item);if(changed===null)return;
+  const name=changed.trim();if(!name){toast('Grocery item cannot be blank.');return;}
+  if(name.length>120){toast('Keep grocery items under 120 characters.');return;}
+  try{await supabaseRequest('/rest/v1/groceries?id=eq.'+encodeURIComponent(item.id),{method:'PATCH',headers:{'Prefer':'return=minimal'},body:JSON.stringify({item:name,updated_at:new Date().toISOString()})});await loadFood();toast('Grocery updated. ✦');}
+  catch(err){console.error(err);toast('Could not edit grocery item.');}
+}
+document.getElementById('dashboardGroceryForm').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const input=document.getElementById('dashboardGroceryInput'),name=input.value.trim();
+  if(!name||!currentUser)return;
+  input.disabled=true;
+  try{
+    await supabaseRequest('/rest/v1/groceries',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify({user_id:currentUser.id,item:name,quantity:null,purchased:false,location:'grocery',stock_status:'out',staple:false,category:suggestedFoodCategory(name),notes:null,updated_at:new Date().toISOString()})});
+    input.value='';await loadFood();toast('Added to your grocery list. 🛒');
+  }catch(err){console.error(err);toast('Could not add grocery item: '+(err.message||'Unknown error'));}
+  finally{input.disabled=false;input.focus();}
+});
 function printPlannerDay(){
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const today=new Date(),dayISO=typeof localDate==='string'?localDate:today.toISOString().slice(0,10);
