@@ -203,6 +203,11 @@ input,select,textarea,button{max-width:100%}
 .cc-fresh-preview td,.cc-fresh-preview th{padding:7px 5px;border-bottom:1px solid var(--line);text-align:left}
 .cc-fresh-note{font-size:12px;color:var(--muted)}
 
+/* v15.8.13: hide completed reminders until explicitly expanded; readable entry text */
+#reminderCompletedList[hidden]{display:none!important}
+.cc-reminder-form #reminderTitle{color:#fff!important;caret-color:#fff}
+.cc-reminder-form #reminderTitle::placeholder{color:rgba(255,255,255,.72)}
+
 /* v15.8.12: streamlined dashboard reminders */
 .cc-reminder-form #reminderTitle{background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 2px;box-shadow:none;outline-offset:2px}
 .cc-reminder-form #reminderTitle:focus{border-bottom:2px solid var(--accent, currentColor)}
