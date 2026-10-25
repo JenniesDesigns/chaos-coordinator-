@@ -506,7 +506,7 @@ body[data-accent="red"]{--pink:#ff5c68}
 
   <div class="planner-extras">
     <div class="card planner-extra cc-reminders"><h2>✨ Don't Forget Your Spells <span>Reminders</span></h2><p class="muted">Little things, safely remembered.</p>
-      <form id="reminderAddForm" class="cc-reminder-form"><input id="reminderTitle" type="text" maxlength="300" placeholder="Click here and type a reminder…" aria-label="Reminder" required><label class="muted" for="reminderDue">Due date (optional)</label><input id="reminderDue" type="date"><button class="primary" type="submit">+ Add reminder</button></form>
+      <form id="reminderAddForm" class="cc-reminder-form"><input id="reminderTitle" type="text" maxlength="300" placeholder="Type a reminder and press Enter…" aria-label="Reminder (press Enter to add)" autocomplete="off" required></form>
       <div id="reminderActiveList" class="cc-reminder-list" aria-live="polite"><p class="muted">Loading reminders…</p></div>
       <button type="button" id="reminderCompletedToggle" class="linkbtn" aria-expanded="false">Show Completed (0)</button><div id="reminderCompletedList" class="cc-reminder-list" hidden></div>
     </div>
@@ -3070,17 +3070,17 @@ async function ccDeleteReminder(r){
 }
 document.getElementById("reminderAddForm").addEventListener("submit",async e=>{
   e.preventDefault();if(!currentUser)return;
-  const title=document.getElementById("reminderTitle").value.trim(),due=document.getElementById("reminderDue").value;
+  const title=document.getElementById("reminderTitle").value.trim();
   if(!title)return;
-  const form=e.currentTarget,btn=form.querySelector('button[type="submit"]');btn.disabled=true;
+  const form=e.currentTarget,input=document.getElementById("reminderTitle");input.disabled=true;
   let saved=false;
   try{
-    await supabaseRequest("/rest/v1/reminders",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,due_date:due||null})});
+    await supabaseRequest("/rest/v1/reminders",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,due_date:null})});
     saved=true;form.reset();toast("Reminder saved. ✦");
     await ccLoadReminders();
   }
   catch(err){console.error(err);toast(saved?"Reminder saved, but the list couldn't refresh. Please reload the page.":"Couldn't save reminder: "+(err.message||"Unknown error"));}
-  finally{btn.disabled=false;}
+  finally{input.disabled=false;input.focus();}
 });
 document.getElementById("reminderCompletedToggle").addEventListener("click",()=>{ccShowCompleted=!ccShowCompleted;ccRenderReminders();});
 
