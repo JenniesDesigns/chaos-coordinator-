@@ -203,6 +203,13 @@ input,select,textarea,button{max-width:100%}
 .cc-fresh-preview td,.cc-fresh-preview th{padding:7px 5px;border-bottom:1px solid var(--line);text-align:left}
 .cc-fresh-note{font-size:12px;color:var(--muted)}
 
+
+/* v15.8.15: Calls are a separate twin of Reminders. */
+#callCompletedList[hidden]{display:none!important}
+.cc-calls #callTitle{color:#fff!important;caret-color:#fff;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 2px;box-shadow:none;outline-offset:2px}
+.cc-calls #callTitle:focus{border-bottom:2px solid var(--pink)}
+.cc-calls #callTitle::placeholder{color:rgba(255,255,255,.72)}
+
 /* v15.8.13: hide completed reminders until explicitly expanded; readable entry text */
 #reminderCompletedList[hidden]{display:none!important}
 .cc-reminder-form #reminderTitle{color:#fff!important;caret-color:#fff}
@@ -510,7 +517,11 @@ body[data-accent="red"]{--pink:#ff5c68}
       <div id="reminderActiveList" class="cc-reminder-list" aria-live="polite"><p class="muted">Loading reminders…</p></div>
       <button type="button" id="reminderCompletedToggle" class="linkbtn" aria-expanded="false">Show Completed (0)</button><div id="reminderCompletedList" class="cc-reminder-list" hidden></div>
     </div>
-    <div class="card planner-extra"><h2>📞 Summon Your People <span>Calls & follow-ups</span></h2><p class="muted">People to reach out to and things to follow up on.</p><div class="planner-note-lines" aria-hidden="true"></div><button class="linkbtn" data-go="calendar">Add a reminder →</button></div>
+    <div class="card planner-extra cc-calls"><h2>📞 Summon Your People <span>Calls & follow-ups</span></h2><p class="muted">People to reach out to and things to follow up on.</p>
+      <form id="callAddForm" class="cc-reminder-form"><input id="callTitle" type="text" maxlength="300" placeholder="Type a person to call and press Enter…" aria-label="Person to call (press Enter to add)" autocomplete="off" required></form>
+      <div id="callActiveList" class="cc-reminder-list" aria-live="polite"><p class="muted">Loading calls…</p></div>
+      <button type="button" id="callCompletedToggle" class="linkbtn" aria-expanded="false">Show Completed (0)</button><div id="callCompletedList" class="cc-reminder-list" hidden></div>
+    </div>
     <div class="card planner-extra"><h2>🛒 Supply Run <span>Groceries & errands</span></h2><div id="dashboardSupply" class="mini-list">Loading shopping list…</div><button class="linkbtn" data-go="groceries">Grocery List →</button></div>
   </div>
   <div class="planner-print-toolbar"><span id="plannerDate"></span><button type="button" id="printMyDay" class="primary">🖨 Print My Day</button></div>
@@ -3084,13 +3095,95 @@ document.getElementById("reminderAddForm").addEventListener("submit",async e=>{
 });
 document.getElementById("reminderCompletedToggle").addEventListener("click",()=>{ccShowCompleted=!ccShowCompleted;ccRenderReminders();});
 
+
+// v15.8.15: Independent Supabase-backed Calls & Follow-Ups list.
+let ccCalls=[];
+let ccShowCompletedCalls=false;
+function ccRenderCalls(){
+  const active=document.getElementById("callActiveList"),completed=document.getElementById("callCompletedList"),toggle=document.getElementById("callCompletedToggle");
+  if(!active||!completed||!toggle)return;
+  active.replaceChildren();completed.replaceChildren();
+  const open=ccCalls.filter(c=>!c.completed).sort((a,b)=>(a.created_at||"").localeCompare(b.created_at||""));
+  const done=ccCalls.filter(c=>c.completed).sort((a,b)=>(b.completed_at||"").localeCompare(a.completed_at||""));
+  if(!open.length){const p=document.createElement("p");p.className="muted";p.textContent="Nobody to summon right now. ✦";active.append(p);}
+  open.forEach(c=>ccCallRow(c,active));
+  done.forEach(c=>ccCallRow(c,completed));
+  toggle.textContent=(ccShowCompletedCalls?"Hide":"Show")+" Completed ("+done.length+")";
+  toggle.setAttribute("aria-expanded",String(ccShowCompletedCalls));
+  completed.hidden=!ccShowCompletedCalls;
+}
+function ccCallRow(c,container){
+  const row=document.createElement("div");row.className="cc-reminder-item"+(c.completed?" cc-reminder-completed":"");
+  const check=document.createElement("input");check.type="checkbox";check.checked=!!c.completed;
+  check.setAttribute("aria-label",(c.completed?"Mark not called: ":"Mark called: ")+c.title);
+  check.addEventListener("change",async()=>{
+    const wasCompleted=c.completed,wasCompletedAt=c.completed_at;
+    c.completed=check.checked;c.completed_at=c.completed?new Date().toISOString():null;
+    ccRenderCalls();
+    try{await ccPatchCall(c.id,{completed:c.completed,completed_at:c.completed_at});}
+    catch(e){c.completed=wasCompleted;c.completed_at=wasCompletedAt;ccRenderCalls();}
+  });
+  const body=document.createElement("div");body.className="cc-reminder-body";body.textContent=c.title;
+  const actions=document.createElement("div");actions.className="cc-reminder-actions";
+  actions.append(ccReminderButton("Edit",()=>ccEditCall(c)),ccReminderButton("Delete",()=>ccDeleteCall(c)));
+  row.append(check,body,actions);container.append(row);
+}
+async function ccLoadCalls(){
+  if(!currentUser)return;
+  try{
+    const rows=await supabaseRequest("/rest/v1/calls?select=*&order=created_at.asc",{headers:{"Accept":"application/json"}});
+    ccCalls=Array.isArray(rows)?rows:[];ccRenderCalls();
+  }catch(err){
+    console.error("Calls load failed",err);
+    const list=document.getElementById("callActiveList");
+    if(list)list.textContent="Could not load calls. Check the table permissions.";
+  }
+}
+async function ccPatchCall(id,changes){
+  try{
+    await supabaseRequest("/rest/v1/calls?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(changes)});
+    await ccLoadCalls();
+  }catch(err){console.error(err);toast("Couldn't update call: "+(err.message||"Unknown error"));throw err;}
+}
+async function ccEditCall(c){
+  const title=prompt("Edit person to call or follow-up:",c.title);
+  if(title===null)return;
+  const clean=title.trim();if(!clean){toast("Call cannot be blank.");return;}
+  if(clean.length>300){toast("Keep calls under 300 characters.");return;}
+  try{await ccPatchCall(c.id,{title:clean});toast("Call updated. ✦");}catch(err){}
+}
+async function ccDeleteCall(c){
+  if(!confirm("Delete call: "+c.title+"?"))return;
+  try{
+    await supabaseRequest("/rest/v1/calls?id=eq."+encodeURIComponent(c.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});
+    await ccLoadCalls();toast("Call deleted.");
+  }catch(err){console.error(err);toast("Couldn't delete call.");}
+}
+document.getElementById("callAddForm").addEventListener("submit",async e=>{
+  e.preventDefault();if(!currentUser)return;
+  const form=e.currentTarget,input=document.getElementById("callTitle"),title=input.value.trim();
+  if(!title)return;
+  input.disabled=true;let saved=false;
+  try{
+    await supabaseRequest("/rest/v1/calls",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title})});
+    saved=true;form.reset();toast("Call added. ✦");
+    await ccLoadCalls();
+  }catch(err){
+    console.error(err);
+    toast(saved?"Call saved, but the list couldn't refresh. Please reload.":"Couldn't save call: "+(err.message||"Unknown error"));
+  }finally{input.disabled=false;input.focus();}
+});
+document.getElementById("callCompletedToggle").addEventListener("click",()=>{
+  ccShowCompletedCalls=!ccShowCompletedCalls;ccRenderCalls();
+});
+
 async function startApp(user){
   currentUser=user;
   userEmail.textContent=user.email||"Account";
   authGate.style.display="none";
   await loadSpaces();
   await loadUserSettings();
-  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings(),loadSpending(),ccLoadReminders()]);
+  await Promise.all([loadEvents(),loadGoals(),loadChores(),loadProjects(),loadFood(),loadMealPlans(),loadBills(),loadDebts(),loadSavings(),loadPaydaySettings(),loadSpending(),ccLoadReminders(),ccLoadCalls()]);
   await migrateLegacyChores();
   await loadHousekeepingSettings();
   renderChores();renderLiveDashboard();
