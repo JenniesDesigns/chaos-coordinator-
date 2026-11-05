@@ -432,7 +432,28 @@ body[data-accent="red"]{--pink:#ff5c68}
   .meal-plan-body{display:none;padding-top:12px}
   .meal-plan-card.meal-open .meal-plan-body{display:block}
 }
-</style><style>#editBillDue::-webkit-calendar-picker-indicator{opacity:0!important;pointer-events:none!important}#editBillDue{min-width:0}</style></head>
+</style><style>
+/* Bill edit: one visible calendar button, and room for native select arrows. */
+#editBillDue::-webkit-calendar-picker-indicator{
+  display:none!important;
+  -webkit-appearance:none!important;
+  opacity:0!important;
+  width:0!important;
+  margin:0!important;
+  pointer-events:none!important;
+}
+#editBillDue{min-width:0!important;max-width:100%;box-sizing:border-box}
+#billEditModal #editBillDuePicker{flex:0 0 44px;min-width:44px}
+#billEditModal .field{min-width:0}
+#billEditModal select{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+  padding-right:36px!important;
+  background-position:right 12px center;
+}
+</style></head>
 <body>
 
 <style>
