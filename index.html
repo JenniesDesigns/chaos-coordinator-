@@ -428,7 +428,7 @@ body[data-accent="red"]{--pink:#ff5c68}
   .meal-plan-body{display:none;padding-top:12px}
   .meal-plan-card.meal-open .meal-plan-body{display:block}
 }
-</style></head>
+</style><style>#editBillDue::-webkit-calendar-picker-indicator{opacity:0!important;pointer-events:none!important}#editBillDue{min-width:0}</style></head>
 <body>
 
 <style>
@@ -755,6 +755,7 @@ body[data-accent="red"]{--pink:#ff5c68}
         <div class="stat"><span>Savings planned</span><strong id="paydaySavingsTotal">$0.00</strong></div>
         <div class="stat"><span>Actually left</span><strong id="paydayAfterPlans">$0.00</strong></div>
       </div>
+      <div id="paydaySpentList" style="margin-bottom:12px"></div>
       <div id="paydaySavingsList" class="empty" style="margin-bottom:12px">No paycheck savings planned yet. ✦</div>
       <div id="paydayBillList" class="empty">Nothing due before payday. The money goblin approves. ✦</div>
     </div>
@@ -1053,7 +1054,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <label class="field">Amount<input id="editBillAmount" required type="number" min="0" step="0.01"></label>
       <label class="field">Due date
         <div style="display:flex;gap:8px;align-items:center">
-          <input id="editBillDue" required type="date" style="flex:1">
+          <input id="editBillDue" required type="date" style="flex:1;min-width:0">
           <button id="editBillDuePicker" type="button" aria-label="Open calendar" title="Open calendar">📅</button>
         </div>
       </label>
@@ -1141,6 +1142,15 @@ body[data-accent="red"]{--pink:#ff5c68}
     </div>
   </div>
 </div>
+<div class="cc-modal" id="billPaymentModal" aria-hidden="true"><div class="cc-modal-card">
+<h2>Record bill payment</h2><p id="billPaymentName"></p><form id="billPaymentForm" class="formgrid">
+<input id="billPaymentId" type="hidden">
+<label class="field">Amount actually paid<input id="billPaymentAmount" type="number" min="0.01" step="0.01" required></label>
+<label class="field">Date paid<input id="billPaymentDate" type="date" required></label>
+<label class="field" style="grid-column:1/-1">Paid from paycheck<select id="billPaymentPaycheck"></select></label>
+<small style="grid-column:1/-1;color:var(--muted)">Partial payments leave the unpaid balance on the bill. Overpayments are recorded at the actual amount.</small>
+<div class="cc-modal-actions" style="grid-column:1/-1"><button id="cancelBillPayment" type="button">Cancel</button><button class="primary" type="submit">Record payment</button></div>
+</form></div></div>
 <div class="cc-modal" id="linkedDebtPaymentModal" aria-hidden="true">
   <div class="cc-modal-card">
     <h2>Pay linked debt bill</h2>
@@ -1161,7 +1171,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <label class="field">Amount<input id="editSpendingAmount" required type="number" min="0.01" step="0.01"></label>
       <label class="field">Category<select id="editSpendingCategory"><option>Groceries</option><option>Gas / Transportation</option><option>Dining</option><option>Household</option><option>Pets</option><option>Medical</option><option>Fun</option><option>Other</option><option>Bills</option></select></label>
       <label class="field">Date<input id="editSpendingDate" required type="date"></label>
-      <label class="field" style="grid-column:1/-1">Notes<textarea id="editSpendingNotes" rows="2"></textarea></label>
+      <label class="field" style="grid-column:1/-1">Paycheck funding this expense<select id="editSpendingPaycheck"></select></label><label class="field" style="grid-column:1/-1">Notes<textarea id="editSpendingNotes" rows="2"></textarea></label>
       <div class="cc-modal-actions"><button id="cancelSpendingEdit" type="button">Cancel</button><button class="primary" type="submit">Save changes</button></div>
     </form>
   </div>
@@ -2363,7 +2373,7 @@ function renderBills(){
     const main=document.createElement("div");main.className="entry-main";
     const title=document.createElement("strong");title.textContent=b.name+" · "+money(b.amount);
     const meta=document.createElement("small");meta.textContent=(b.paid?"Paid":"Due "+prettyDate(b.due_date))+" · "+(b.category||"Other")+" · "+billRepeatLabel(b.recurrence)+(b.autopay?" · Autopay":"")+(b.linked_debt_id?" · Linked to "+linkedDebtName(b.linked_debt_id):"");
-    main.append(title,meta);if(b.notes){const note=document.createElement("small");note.textContent=b.notes;main.append(note)}
+    main.append(title,meta);if(b.notes){const note=document.createElement("small");note.textContent=cleanBillNotes(b.notes);if(note.textContent)main.append(note)}
     const actions=document.createElement("div");actions.className="chore-actions";
     if(!b.paid){const paid=document.createElement("button");paid.type="button";paid.textContent="Paid ✓";paid.addEventListener("click",()=>payBill(b));actions.append(paid)}
     const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openBillEdit(b));
@@ -2377,20 +2387,48 @@ document.getElementById("billForm").addEventListener("submit",async e=>{
   try{await supabaseRequest("/rest/v1/bills",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,name,amount,due_date,paid:false,recurring:recurrence!=="none",recurrence,category,autopay,notes,linked_debt_id,updated_at:new Date().toISOString()})});document.getElementById("billForm").reset();document.getElementById("billRecurrence").value="monthly";document.getElementById("billCategory").value="Other";await loadBills();toast("Bill added. Money goblin is watching it. ✦")}catch(err){console.error(err);toast("Couldn't add that bill: "+(err.message||"unknown error"))}
 });
 document.querySelectorAll("[data-bill-filter]").forEach(b=>b.addEventListener("click",()=>{billFilter=b.dataset.billFilter;document.querySelectorAll("[data-bill-filter]").forEach(x=>x.classList.toggle("active",x===b));renderBills()}));
+function originalBillAmount(b){const m=String(b.notes||"").match(/\[CC-ORIGINAL-AMOUNT:(\d+(?:\.\d+)?)\]/);return m?Number(m[1]):Number(b.amount||0)}
+function cleanBillNotes(notes){return String(notes||"").replace(/\s*\[CC-ORIGINAL-AMOUNT:\d+(?:\.\d+)?\]/g,"").trim()}
 async function completeBillPayment(b){
   if((b.recurrence||"monthly")==="none")await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:true,updated_at:new Date().toISOString()})});
-  else{const next=advanceBillDate(b.due_date,b.recurrence||"monthly");await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:false,due_date:next,updated_at:new Date().toISOString()})})}
+  else{const next=advanceBillDate(b.due_date,b.recurrence||"monthly");await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({paid:false,due_date:next,amount:originalBillAmount(b),notes:cleanBillNotes(b.notes),updated_at:new Date().toISOString()})})}
 }
-async function payBill(b){
-  if(b.linked_debt_id){openLinkedDebtPayment(b);return}
-  try{await completeBillPayment(b);try{await recordSpending(b.name,Number(b.amount||0),"Bills",isoLocal(new Date()),"Recorded automatically when bill was marked paid.")}catch(spendErr){console.error("Bill paid but spending record failed",spendErr);toast("Bill was paid, but its spending record did not save. Add it under Other Spending.");await loadBills();return}await Promise.all([loadBills(),loadSpending()]);toast((b.recurrence||"monthly")==="none"?"Paid. Done and dusted. ✦":"Paid! Money stays spent and the next due date moved forward. ✦")}
-  catch(err){console.error(err);toast("Couldn't update that bill.")}
+function payBill(b){
+ const m=document.getElementById("billPaymentModal");
+ document.getElementById("billPaymentId").value=b.id;
+ document.getElementById("billPaymentName").textContent=b.name+" · scheduled "+money(b.amount);
+ document.getElementById("billPaymentAmount").value=Number(b.amount||0).toFixed(2);
+ const date=isoLocal(new Date());document.getElementById("billPaymentDate").value=date;
+ paycheckOptions(document.getElementById("billPaymentPaycheck"),date);
+ m.classList.add("open");m.setAttribute("aria-hidden","false");
 }
-function openBillEdit(b){document.getElementById("editBillId").value=b.id;document.getElementById("editBillName").value=b.name;document.getElementById("editBillAmount").value=b.amount;document.getElementById("editBillDue").value=b.due_date||"";document.getElementById("editBillRecurrence").value=b.recurrence||"monthly";document.getElementById("editBillCategory").value=b.category||"Other";refreshDebtSelectors();document.getElementById("editBillLinkedDebt").value=b.linked_debt_id||"";document.getElementById("editBillAutopay").checked=!!b.autopay;document.getElementById("editBillNotes").value=b.notes||"";document.getElementById("billEditModal").classList.add("open");document.getElementById("billEditModal").setAttribute("aria-hidden","false")}
+function closeBillPayment(){const m=document.getElementById("billPaymentModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
+document.getElementById("cancelBillPayment").addEventListener("click",closeBillPayment);
+document.getElementById("billPaymentModal").addEventListener("click",e=>{if(e.target.id==="billPaymentModal")closeBillPayment()});
+document.getElementById("billPaymentDate").addEventListener("change",e=>paycheckOptions(document.getElementById("billPaymentPaycheck"),e.target.value));
+document.getElementById("billPaymentForm").addEventListener("submit",async e=>{
+ e.preventDefault();const b=bills.find(x=>x.id===document.getElementById("billPaymentId").value);
+ const amount=Number(document.getElementById("billPaymentAmount").value),date=document.getElementById("billPaymentDate").value;
+ const check=document.getElementById("billPaymentPaycheck").value;
+ if(!b||!Number.isFinite(amount)||amount<=0||!date)return;
+ const button=e.target.querySelector('[type="submit"]');button.disabled=true;
+ try{
+  // Save the financial transaction before updating the bill, so failed saves cannot silently lose the payment.
+  await recordSpending(b.name,amount,"Bills",date,paymentNotes("Recorded from bill payment.",check));
+  const due=Number(b.amount||0),partial=amount+0.001<due;
+  if(partial){const old=String(b.notes||"");const notes=/\[CC-ORIGINAL-AMOUNT:/.test(old)?old:(old+" [CC-ORIGINAL-AMOUNT:"+due.toFixed(2)+"]").trim();await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({amount:Math.round((due-amount)*100)/100,notes,updated_at:new Date().toISOString()})})}
+  else await completeBillPayment(b);
+  if(b.linked_debt_id){const d=debts.find(x=>x.id===b.linked_debt_id);if(d){await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(d.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({balance:Math.max(0,Number(d.balance||0)-amount),updated_at:new Date().toISOString()})})}}
+  closeBillPayment();await Promise.all([loadBills(),loadSpending(),loadDebts()]);toast(partial?"Partial payment recorded. Remaining amount is still due. ✦":"Payment recorded for your chosen paycheck. ✦");
+ }catch(err){console.error(err);toast("Payment needs review: "+(err.message||"save failed")+". Check spending before retrying.")}
+ finally{button.disabled=false}
+});
+
+function openBillEdit(b){document.getElementById("editBillId").value=b.id;document.getElementById("editBillName").value=b.name;document.getElementById("editBillAmount").value=b.amount;document.getElementById("editBillDue").value=b.due_date||"";document.getElementById("editBillRecurrence").value=b.recurrence||"monthly";document.getElementById("editBillCategory").value=b.category||"Other";refreshDebtSelectors();document.getElementById("editBillLinkedDebt").value=b.linked_debt_id||"";document.getElementById("editBillAutopay").checked=!!b.autopay;document.getElementById("editBillNotes").value=cleanBillNotes(b.notes);document.getElementById("billEditModal").classList.add("open");document.getElementById("billEditModal").setAttribute("aria-hidden","false")}
 function closeBillEdit(){document.getElementById("billEditModal").classList.remove("open");document.getElementById("billEditModal").setAttribute("aria-hidden","true")}
 document.getElementById("cancelBillEdit").addEventListener("click",closeBillEdit);document.getElementById("billEditModal").addEventListener("click",e=>{if(e.target.id==="billEditModal")closeBillEdit()});
 document.getElementById("billEditForm").addEventListener("submit",async e=>{
-  e.preventDefault();const id=document.getElementById("editBillId").value,recurrence=document.getElementById("editBillRecurrence").value,payload={name:document.getElementById("editBillName").value.trim(),amount:Number(document.getElementById("editBillAmount").value),due_date:document.getElementById("editBillDue").value,recurrence,recurring:recurrence!=="none",category:document.getElementById("editBillCategory").value,linked_debt_id:document.getElementById("editBillLinkedDebt").value||null,autopay:document.getElementById("editBillAutopay").checked,notes:document.getElementById("editBillNotes").value.trim(),updated_at:new Date().toISOString()};
+  e.preventDefault();const id=document.getElementById("editBillId").value,recurrence=document.getElementById("editBillRecurrence").value,payload={name:document.getElementById("editBillName").value.trim(),amount:Number(document.getElementById("editBillAmount").value),due_date:document.getElementById("editBillDue").value,recurrence,recurring:recurrence!=="none",category:document.getElementById("editBillCategory").value,linked_debt_id:document.getElementById("editBillLinkedDebt").value||null,autopay:document.getElementById("editBillAutopay").checked,notes:(document.getElementById("editBillNotes").value.trim()+(String(bills.find(x=>x.id===id)?.notes||"").match(/\[CC-ORIGINAL-AMOUNT:[^\]]+\]/)?.[0]?" "+String(bills.find(x=>x.id===id).notes).match(/\[CC-ORIGINAL-AMOUNT:[^\]]+\]/)[0]:"")).trim(),updated_at:new Date().toISOString()};
   try{await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeBillEdit();await loadBills();toast("Bill updated.")}catch(err){console.error(err);toast("Couldn't save that bill.")}
 });
 async function removeBill(b){if(!confirm("Remove "+b.name+"?"))return;try{await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadBills();toast("Bill removed.")}catch(err){console.error(err);toast("Couldn't remove that bill.")}}
@@ -2630,6 +2668,36 @@ document.getElementById("dateFallbackModal").addEventListener("click",e=>{if(e.t
 
 // ---- Spending / Payday Reality Check (v15.3.2) ----
 let spending=[];
+// Paycheck assignments are stored in the existing spending notes field, with no schema changes.
+const CC_PAY_TAG="[CC-PAYCHECK:";
+function paymentPaycheck(x){const m=String(x.notes||"").match(/\[CC-PAYCHECK:(\d{4}-\d{2}-\d{2})\]/);return m?m[1]:null}
+function paymentCleanNotes(x){return String(x||"").replace(/\s*\[CC-PAYCHECK:\d{4}-\d{2}-\d{2}\]/g,"").trim()}
+function paymentNotes(notes,payday){return paymentCleanNotes(notes)+(payday?" [CC-PAYCHECK:"+payday+"]":"")}
+function paydayBefore(date){
+ if(!paydaySettings?.next_payday||!date)return "";
+ let d=paydayLocalDate(paydaySettings.next_payday),target=paydayLocalDate(date),guard=0;
+ if(!d||!target)return "";
+ while(d>target&&guard++<250){const prior=new Date(d);const f=paydaySettings.pay_frequency;
+   if(f==="weekly")prior.setDate(prior.getDate()-7);
+   else if(f==="biweekly")prior.setDate(prior.getDate()-14);
+   else if(f==="monthly")prior.setMonth(prior.getMonth()-1);
+   else prior.setDate(prior.getDate()-15);
+   if(prior>=d)break;d=prior;
+ }
+ while(guard++<500){const n=nextPaydayAfter(d,paydaySettings);if(n>target)break;d=n}
+ return isoLocal(d);
+}
+function paycheckOptions(select,date,selected){
+ select.innerHTML="";const auto=paydayBefore(date),dates=new Set();
+ if(auto){let d=paydayLocalDate(auto);for(let i=0;i<8;i++){dates.add(isoLocal(d));d=nextPaydayAfter(d,paydaySettings)}
+ d=paydayLocalDate(auto);for(let i=0;i<8;i++){const f=paydaySettings.pay_frequency;const prev=new Date(d);if(f==="weekly")prev.setDate(prev.getDate()-7);else if(f==="biweekly")prev.setDate(prev.getDate()-14);else if(f==="monthly")prev.setMonth(prev.getMonth()-1);else prev.setDate(prev.getDate()-15);d=prev;dates.add(isoLocal(d))}}
+ if(selected)dates.add(selected);
+ const blank=document.createElement("option");blank.value="";blank.textContent="Use payment date (automatic)";select.append(blank);
+ [...dates].sort().reverse().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=prettyDate(v)+(v===auto?" · suggested":"");select.append(o)});
+ select.value=selected||auto||"";
+}
+function paymentBelongs(x,p){const chosen=paymentPaycheck(x);return chosen?chosen===p.start:(x.spending_date>=p.start&&x.spending_date<p.end)}
+
 function currentPayPeriod(next){
   if(!next||!paydaySettings)return null;
   const start=new Date(next),f=paydaySettings.pay_frequency;
@@ -2639,7 +2707,7 @@ function currentPayPeriod(next){
   else start.setDate(start.getDate()-15);
   return {start:isoLocal(start),end:isoLocal(next)};
 }
-function spendingThisPayPeriod(next){const p=currentPayPeriod(next);return p?spending.filter(x=>x.spending_date&&x.spending_date>=p.start&&x.spending_date<p.end):[]}
+function spendingThisPayPeriod(next){const p=currentPayPeriod(next);return p?spending.filter(x=>x.spending_date&&paymentBelongs(x,p)):[]}
 async function recordSpending(description,amount,category="Other",date=isoLocal(new Date()),notes=""){
   await supabaseRequest("/rest/v1/spending",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,description,amount:Number(amount),category,spending_date:date,notes,updated_at:new Date().toISOString()})});
 }
@@ -2654,11 +2722,12 @@ function renderSpending(){
   items.forEach(s=>{const row=document.createElement("div");row.className="entry";const main=document.createElement("div");main.className="entry-main";const title=document.createElement("strong");title.textContent=s.description+" · "+money(s.amount);const meta=document.createElement("small");meta.textContent=prettyDate(s.spending_date)+" · "+(s.category||"Other");main.append(title,meta);if(s.notes){const note=document.createElement("small");note.textContent=s.notes;main.append(note)}const actions=document.createElement("div");actions.className="chore-actions";const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openSpendingEdit(s));const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeSpending(s));actions.append(edit,del);row.append(main,actions);list.append(row)});
 }
 document.getElementById("spendingForm").addEventListener("submit",async e=>{e.preventDefault();try{await recordSpending(document.getElementById("spendingDescription").value.trim(),document.getElementById("spendingAmount").value,document.getElementById("spendingCategory").value,document.getElementById("spendingDate").value,document.getElementById("spendingNotes").value.trim());e.target.reset();document.getElementById("spendingDate").value=isoLocal(new Date());await loadSpending();toast("Spending recorded. Actually Left has been updated. ✦")}catch(err){console.error(err);toast("Couldn't record that spending.")}});
-function openSpendingEdit(s){document.getElementById("editSpendingId").value=s.id;document.getElementById("editSpendingDescription").value=s.description||"";document.getElementById("editSpendingAmount").value=s.amount;document.getElementById("editSpendingCategory").value=s.category||"Other";document.getElementById("editSpendingDate").value=s.spending_date||isoLocal(new Date());document.getElementById("editSpendingNotes").value=s.notes||"";const m=document.getElementById("spendingEditModal");m.classList.add("open");m.setAttribute("aria-hidden","false")}
+function openSpendingEdit(s){document.getElementById("editSpendingId").value=s.id;document.getElementById("editSpendingDescription").value=s.description||"";document.getElementById("editSpendingAmount").value=s.amount;document.getElementById("editSpendingCategory").value=s.category||"Other";document.getElementById("editSpendingDate").value=s.spending_date||isoLocal(new Date());document.getElementById("editSpendingNotes").value=paymentCleanNotes(s.notes);paycheckOptions(document.getElementById("editSpendingPaycheck"),s.spending_date||isoLocal(new Date()),paymentPaycheck(s));const m=document.getElementById("spendingEditModal");m.classList.add("open");m.setAttribute("aria-hidden","false")}
+document.getElementById("editSpendingDate").addEventListener("change",e=>paycheckOptions(document.getElementById("editSpendingPaycheck"),e.target.value));
 function closeSpendingEdit(){const m=document.getElementById("spendingEditModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
 document.getElementById("cancelSpendingEdit").addEventListener("click",closeSpendingEdit);
 document.getElementById("spendingEditModal").addEventListener("click",e=>{if(e.target.id==="spendingEditModal")closeSpendingEdit()});
-document.getElementById("spendingEditForm").addEventListener("submit",async e=>{e.preventDefault();const id=document.getElementById("editSpendingId").value,payload={description:document.getElementById("editSpendingDescription").value.trim(),amount:Number(document.getElementById("editSpendingAmount").value),category:document.getElementById("editSpendingCategory").value,spending_date:document.getElementById("editSpendingDate").value,notes:document.getElementById("editSpendingNotes").value.trim(),updated_at:new Date().toISOString()};try{await supabaseRequest("/rest/v1/spending?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeSpendingEdit();await loadSpending();toast("Spending updated. ✦")}catch(err){console.error(err);toast("Couldn't update that spending.")}});
+document.getElementById("spendingEditForm").addEventListener("submit",async e=>{e.preventDefault();const id=document.getElementById("editSpendingId").value,payload={description:document.getElementById("editSpendingDescription").value.trim(),amount:Number(document.getElementById("editSpendingAmount").value),category:document.getElementById("editSpendingCategory").value,spending_date:document.getElementById("editSpendingDate").value,notes:paymentNotes(document.getElementById("editSpendingNotes").value.trim(),document.getElementById("editSpendingPaycheck").value),updated_at:new Date().toISOString()};try{await supabaseRequest("/rest/v1/spending?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(payload)});closeSpendingEdit();await loadSpending();toast("Spending updated. ✦")}catch(err){console.error(err);toast("Couldn't update that spending.")}});
 async function removeSpending(s){if(!confirm("Remove "+s.description+" from spending?"))return;try{await supabaseRequest("/rest/v1/spending?id=eq."+encodeURIComponent(s.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadSpending();toast("Spending removed.")}catch(err){console.error(err);toast("Couldn't remove that spending.")}}
 
 // ---- Payday View (v15.3.2) ----
@@ -2697,8 +2766,8 @@ function normalizePayday(settings){
 }
 function paydayBillsThrough(date){
   if(!date)return[];
-  const end=isoLocal(date),today=isoLocal(new Date());
-  return bills.filter(b=>!b.paid&&b.due_date&&b.due_date>=today&&b.due_date<=end).sort((a,b)=>a.due_date.localeCompare(b.due_date));
+  const end=isoLocal(date);
+  return bills.filter(b=>!b.paid&&b.due_date&&b.due_date<=end).sort((a,b)=>a.due_date.localeCompare(b.due_date));
 }
 function toggleTwiceMonthly(){
   document.getElementById("secondPayDayWrap").style.display=document.getElementById("payFrequency").value==="twice_monthly"?"":"none";
@@ -2774,6 +2843,10 @@ function renderPayday(){
   document.getElementById("paydayFrequencyLabel").textContent=payFrequencyLabel(paydaySettings.pay_frequency);
   document.getElementById("paydayIncome").textContent=money(starting);
   document.getElementById("paydaySpentTotal").textContent=money(spentTotal);
+  const spentList=document.getElementById("paydaySpentList");spentList.innerHTML="";
+  if(periodSpending.length){const head=document.createElement("div");head.style.fontWeight="700";head.style.marginBottom="6px";head.textContent="Already spent — itemized";spentList.append(head);
+   periodSpending.forEach(x=>{const row=document.createElement("div");row.className="mini-line";const label=document.createElement("span");label.textContent=x.description+" · "+prettyDate(x.spending_date);const amount=document.createElement("strong");amount.textContent=money(x.amount);row.append(label,amount);spentList.append(row)});
+  }else{spentList.textContent="No spending recorded against this paycheck.";spentList.className="empty"}
   document.getElementById("paydayBillsTotal").textContent=money(total);
   document.getElementById("paydayRemaining").textContent=money(remaining);
   document.getElementById("paydaySavingsTotal").textContent=money(savingsTotal);
