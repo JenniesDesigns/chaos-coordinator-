@@ -237,6 +237,10 @@ input,select,textarea,button{max-width:100%}
 .cc-reminder-actions{display:flex;gap:5px;flex-wrap:wrap}
 .cc-reminder-actions button{font-size:12px;padding:4px 6px}
 .cc-reminder-completed .cc-reminder-body{text-decoration:line-through;opacity:.7}
+/* Keep payment undo legible on narrow screens. */
+#paydaySpentList .mini-line{align-items:center;flex-wrap:wrap}
+#paydaySpentList .mini-line>span{flex:1 1 160px;overflow-wrap:anywhere}
+#paydaySpentList .mini-line>button{white-space:nowrap}
 </style>
 <style>
 .savings-plan{margin-top:10px;padding:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.035)}
@@ -2010,7 +2014,7 @@ function renderProjectDetail(){
     const txt=document.createElement("div"),title=document.createElement("strong");title.textContent=s.title;if(s.completed)title.style.textDecoration="line-through";
     const meta=document.createElement("small");meta.textContent=(s.completed?"Complete":"To do")+stepDueLabel(s.due_date);
     txt.append(title,meta);
-    if(s.notes){const note=document.createElement("small");note.textContent=s.notes;txt.append(note)}
+    if(s.notes){const note=document.createElement("small");note.textContent=billPaymentVisibleNotes(s.notes);txt.append(note)}
     label.append(box,txt);main.append(label);
     box.addEventListener("change",async()=>{box.disabled=true;try{await supabaseRequest("/rest/v1/project_steps?id=eq."+encodeURIComponent(s.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({completed:box.checked})});await loadProjectSteps()}catch(err){console.error(err);box.checked=!box.checked;toast("Couldn't update that step.")}finally{box.disabled=false}});
     const actions=document.createElement("div");actions.className="chore-actions";
@@ -2414,8 +2418,11 @@ document.getElementById("billPaymentForm").addEventListener("submit",async e=>{
  const button=e.target.querySelector('[type="submit"]');button.disabled=true;
  try{
   // Save the financial transaction before updating the bill, so failed saves cannot silently lose the payment.
-  await recordSpending(b.name,amount,"Bills",date,paymentNotes("Recorded from bill payment.",check));
   const due=Number(b.amount||0),partial=amount+0.001<due;
+  const linkedDebt=b.linked_debt_id?debts.find(x=>x.id===b.linked_debt_id):null;
+  const expected=partial?{paid:false,due_date:b.due_date,amount:Math.round((due-amount)*100)/100}:{paid:(b.recurrence||"monthly")==="none",due_date:(b.recurrence||"monthly")==="none"?b.due_date:advanceBillDate(b.due_date,b.recurrence||"monthly"),amount:(b.recurrence||"monthly")==="none"?due:originalBillAmount(b)};
+  const undo={v:1,bill_id:b.id,before:{paid:!!b.paid,due_date:b.due_date,amount:due,notes:b.notes||""},after:expected,debt:linkedDebt?{id:linkedDebt.id,before:Number(linkedDebt.balance||0),after:Math.max(0,Number(linkedDebt.balance||0)-amount)}:null};
+  await recordSpending(b.name,amount,"Bills",date,billUndoNotes(paymentNotes("Recorded from bill payment.",check),undo));
   if(partial){const old=String(b.notes||"");const notes=/\[CC-ORIGINAL-AMOUNT:/.test(old)?old:(old+" [CC-ORIGINAL-AMOUNT:"+due.toFixed(2)+"]").trim();await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(b.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({amount:Math.round((due-amount)*100)/100,notes,updated_at:new Date().toISOString()})})}
   else await completeBillPayment(b);
   if(b.linked_debt_id){const d=debts.find(x=>x.id===b.linked_debt_id);if(d){await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(d.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({balance:Math.max(0,Number(d.balance||0)-amount),updated_at:new Date().toISOString()})})}}
@@ -2670,6 +2677,14 @@ document.getElementById("dateFallbackModal").addEventListener("click",e=>{if(e.t
 let spending=[];
 // Paycheck assignments are stored in the existing spending notes field, with no schema changes.
 const CC_PAY_TAG="[CC-PAYCHECK:";
+// Undo metadata applies only to payments recorded after this update.
+function billUndoData(x){
+ const m=String(x.notes||"").match(/\[CC-BILL-UNDO:([^\]]+)\]/);
+ if(!m)return null;
+ try{const d=JSON.parse(decodeURIComponent(m[1]));return d&&d.v===1?d:null}catch(_){return null}
+}
+function billUndoNotes(notes,data){return notes+" [CC-BILL-UNDO:"+encodeURIComponent(JSON.stringify(data))+"]"}
+function billPaymentVisibleNotes(notes){return String(notes||"").replace(/\s*\[CC-BILL-UNDO:[^\]]+\]/g,"").trim()}
 function paymentPaycheck(x){const m=String(x.notes||"").match(/\[CC-PAYCHECK:(\d{4}-\d{2}-\d{2})\]/);return m?m[1]:null}
 function paymentCleanNotes(x){return String(x||"").replace(/\s*\[CC-PAYCHECK:\d{4}-\d{2}-\d{2}\]/g,"").trim()}
 function paymentNotes(notes,payday){return paymentCleanNotes(notes)+(payday?" [CC-PAYCHECK:"+payday+"]":"")}
@@ -2719,10 +2734,10 @@ function renderSpending(){
   list.innerHTML="";
   if(!items.length){list.className="empty";list.textContent="No other spending recorded for this pay period. ✦";return}
   list.className="";
-  items.forEach(s=>{const row=document.createElement("div");row.className="entry";const main=document.createElement("div");main.className="entry-main";const title=document.createElement("strong");title.textContent=s.description+" · "+money(s.amount);const meta=document.createElement("small");meta.textContent=prettyDate(s.spending_date)+" · "+(s.category||"Other");main.append(title,meta);if(s.notes){const note=document.createElement("small");note.textContent=s.notes;main.append(note)}const actions=document.createElement("div");actions.className="chore-actions";const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openSpendingEdit(s));const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeSpending(s));actions.append(edit,del);row.append(main,actions);list.append(row)});
+  items.forEach(s=>{const row=document.createElement("div");row.className="entry";const main=document.createElement("div");main.className="entry-main";const title=document.createElement("strong");title.textContent=s.description+" · "+money(s.amount);const meta=document.createElement("small");meta.textContent=prettyDate(s.spending_date)+" · "+(s.category||"Other");main.append(title,meta);if(s.notes){const note=document.createElement("small");note.textContent=billPaymentVisibleNotes(s.notes);main.append(note)}const actions=document.createElement("div");actions.className="chore-actions";const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";edit.addEventListener("click",()=>openSpendingEdit(s));const del=document.createElement("button");del.type="button";del.textContent="Remove";del.addEventListener("click",()=>removeSpending(s));actions.append(edit,del);row.append(main,actions);list.append(row)});
 }
 document.getElementById("spendingForm").addEventListener("submit",async e=>{e.preventDefault();try{await recordSpending(document.getElementById("spendingDescription").value.trim(),document.getElementById("spendingAmount").value,document.getElementById("spendingCategory").value,document.getElementById("spendingDate").value,document.getElementById("spendingNotes").value.trim());e.target.reset();document.getElementById("spendingDate").value=isoLocal(new Date());await loadSpending();toast("Spending recorded. Actually Left has been updated. ✦")}catch(err){console.error(err);toast("Couldn't record that spending.")}});
-function openSpendingEdit(s){document.getElementById("editSpendingId").value=s.id;document.getElementById("editSpendingDescription").value=s.description||"";document.getElementById("editSpendingAmount").value=s.amount;document.getElementById("editSpendingCategory").value=s.category||"Other";document.getElementById("editSpendingDate").value=s.spending_date||isoLocal(new Date());document.getElementById("editSpendingNotes").value=paymentCleanNotes(s.notes);paycheckOptions(document.getElementById("editSpendingPaycheck"),s.spending_date||isoLocal(new Date()),paymentPaycheck(s));const m=document.getElementById("spendingEditModal");m.classList.add("open");m.setAttribute("aria-hidden","false")}
+function openSpendingEdit(s){document.getElementById("editSpendingId").value=s.id;document.getElementById("editSpendingDescription").value=s.description||"";document.getElementById("editSpendingAmount").value=s.amount;document.getElementById("editSpendingCategory").value=s.category||"Other";document.getElementById("editSpendingDate").value=s.spending_date||isoLocal(new Date());document.getElementById("editSpendingNotes").value=billPaymentVisibleNotes(paymentCleanNotes(s.notes));paycheckOptions(document.getElementById("editSpendingPaycheck"),s.spending_date||isoLocal(new Date()),paymentPaycheck(s));const m=document.getElementById("spendingEditModal");m.classList.add("open");m.setAttribute("aria-hidden","false")}
 document.getElementById("editSpendingDate").addEventListener("change",e=>paycheckOptions(document.getElementById("editSpendingPaycheck"),e.target.value));
 function closeSpendingEdit(){const m=document.getElementById("spendingEditModal");m.classList.remove("open");m.setAttribute("aria-hidden","true")}
 document.getElementById("cancelSpendingEdit").addEventListener("click",closeSpendingEdit);
@@ -2821,6 +2836,38 @@ document.getElementById("realityForm").addEventListener("submit",async e=>{
   }catch(err){console.error(err);toast("Couldn't save bank balance: "+(err.message||"unknown error"))}
   finally{btn.disabled=false}
 });
+async function undoPaydaySpending(x){
+ const meta=billUndoData(x),isBill=x.category==="Bills";
+ if(!meta){
+   const message=isBill?
+    "This older payment has no linked undo history. Just Kidding! can remove its spending entry, but CANNOT restore the bill's due date, unpaid balance, or linked debt. You must correct the bill separately in Bills. Remove only the spending entry?":
+    "Remove this spending entry from Already Spent? This cannot be undone.";
+   if(!confirm(message))return;
+   try{await supabaseRequest("/rest/v1/spending?id=eq."+encodeURIComponent(x.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});await loadSpending();toast(isBill?"Spending entry removed. Check the original bill separately.":"Spending entry removed. ✦")}
+   catch(err){console.error(err);toast("Couldn't remove this entry: "+(err.message||"unknown error"))}
+   return;
+ }
+ // Fetch current server state, rather than trusting the cached dashboard.
+ let liveBill,liveDebt;
+ try{
+  const found=await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(meta.bill_id)+"&select=*",{headers:{"Accept":"application/json"}});
+  liveBill=Array.isArray(found)?found[0]:null;
+  if(meta.debt){const debtsFound=await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(meta.debt.id)+"&select=*",{headers:{"Accept":"application/json"}});liveDebt=Array.isArray(debtsFound)?debtsFound[0]:null}
+ }catch(err){toast("Couldn't verify bill state. Nothing changed.");return}
+ if(!liveBill){toast("Original bill is missing. Nothing changed.");return}
+ const cents=v=>Math.round(Number(v||0)*100);
+ const match=!!liveBill.paid===!!meta.after.paid&&liveBill.due_date===meta.after.due_date&&cents(liveBill.amount)===cents(meta.after.amount);
+ const debtMatch=!meta.debt||(liveDebt&&cents(liveDebt.balance)===cents(meta.debt.after));
+ if(!match||!debtMatch){alert("This bill or linked debt has changed since the payment was recorded. For safety, no automatic undo was made. Review the payment in Bills instead.");return}
+ if(!confirm("Just kidding? Restore the original bill"+(meta.debt?" and linked debt":"")+" and remove the "+money(x.amount)+" payment from Already Spent?"))return;
+ try{
+  // Restore the bill before deleting the spending entry. If any operation fails, keep the entry for manual reconciliation.
+  await supabaseRequest("/rest/v1/bills?id=eq."+encodeURIComponent(meta.bill_id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({...meta.before,updated_at:new Date().toISOString()})});
+  if(meta.debt)await supabaseRequest("/rest/v1/debts?id=eq."+encodeURIComponent(meta.debt.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({balance:meta.debt.before,updated_at:new Date().toISOString()})});
+  await supabaseRequest("/rest/v1/spending?id=eq."+encodeURIComponent(x.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});
+  await Promise.all([loadBills(),loadSpending(),loadDebts()]);toast("Just kidding! Payment reversed. ✦");
+ }catch(err){console.error(err);await Promise.allSettled([loadBills(),loadSpending(),loadDebts()]);alert("Undo did not fully finish. Please review this bill, its spending entry, and linked debt before making another change. "+(err.message||""))}
+}
 function renderPayday(){
   const setup=document.getElementById("paydaySetup"),summary=document.getElementById("paydaySummary");
   if(!paydaySettings||!paydaySettings.next_payday){
@@ -2845,7 +2892,8 @@ function renderPayday(){
   document.getElementById("paydaySpentTotal").textContent=money(spentTotal);
   const spentList=document.getElementById("paydaySpentList");spentList.innerHTML="";
   if(periodSpending.length){const head=document.createElement("div");head.style.fontWeight="700";head.style.marginBottom="6px";head.textContent="Already spent — itemized";spentList.append(head);
-   periodSpending.forEach(x=>{const row=document.createElement("div");row.className="mini-line";const label=document.createElement("span");label.textContent=x.description+" · "+prettyDate(x.spending_date);const amount=document.createElement("strong");amount.textContent=money(x.amount);row.append(label,amount);spentList.append(row)});
+   periodSpending.forEach(x=>{const row=document.createElement("div");row.className="mini-line";const label=document.createElement("span");label.textContent=x.description+" · "+prettyDate(x.spending_date);const amount=document.createElement("strong");amount.textContent=money(x.amount);row.append(label,amount);
+    const undo=document.createElement("button");undo.type="button";undo.className="entry-action";undo.textContent="↩ Just Kidding!";undo.title="Undo this recorded expense";undo.addEventListener("click",()=>undoPaydaySpending(x));row.append(undo);spentList.append(row)});
   }else{spentList.textContent="No spending recorded against this paycheck.";spentList.className="empty"}
   document.getElementById("paydayBillsTotal").textContent=money(total);
   document.getElementById("paydayRemaining").textContent=money(remaining);
