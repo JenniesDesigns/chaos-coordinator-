@@ -453,6 +453,21 @@ body[data-accent="red"]{--pink:#ff5c68}
   padding-right:36px!important;
   background-position:right 12px center;
 }
+</style><style>
+/* Bill editor: independent, responsive grid instead of shared four-column form. */
+#billEditModal .cc-modal-card{width:min(620px,calc(100vw - 24px));box-sizing:border-box}
+#billEditForm{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:16px!important;align-items:start!important}
+#billEditForm>.field{min-width:0;display:flex;flex-direction:column;gap:7px}
+#billEditForm>.field:nth-of-type(3),#billEditForm>.field:nth-of-type(4){grid-column:1/-1}
+#billEditForm>.field:nth-of-type(7){justify-content:center}
+#billEditForm>.field:nth-of-type(7) span{display:flex;align-items:center}
+#billEditForm input:not([type=checkbox]),#billEditForm select,#billEditForm textarea{box-sizing:border-box;width:100%;min-width:0;max-width:100%;height:auto}
+#billEditForm #editBillDuePicker{display:none!important}
+#billEditForm #editBillDue::-webkit-calendar-picker-indicator{display:block!important;-webkit-appearance:auto!important;opacity:1!important;width:auto!important;margin:0!important;pointer-events:auto!important}
+#billEditForm #editBillDue{appearance:auto!important;-webkit-appearance:auto!important;min-height:44px}
+#billEditForm select{appearance:auto!important;-webkit-appearance:menulist!important;padding-right:10px!important}
+#billEditForm .cc-modal-actions{grid-column:1/-1;flex-wrap:wrap}
+@media(max-width:540px){#billEditForm{grid-template-columns:minmax(0,1fr)!important}#billEditForm>.field{grid-column:1/-1!important}}
 </style></head>
 <body>
 
@@ -1080,7 +1095,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <label class="field">Due date
         <div style="display:flex;gap:8px;align-items:center">
           <input id="editBillDue" required type="date" style="flex:1;min-width:0">
-          <button id="editBillDuePicker" type="button" aria-label="Open calendar" title="Open calendar">📅</button>
+          <button id="editBillDuePicker" type="button" hidden tabindex="-1" aria-hidden="true">📅</button>
         </div>
       </label>
       <label class="field">Repeats<select id="editBillRecurrence"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks</option><option value="quarterly">Every 3 months</option><option value="semiannual">Every 6 months</option><option value="yearly">Yearly</option><option value="none">One-time</option></select></label>
