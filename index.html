@@ -3014,9 +3014,15 @@ function renderDashboardMoney(){
   const box=document.getElementById("dashboardMoney");if(!box)return;box.innerHTML="";box.className="mini-list";
   const next=paydaySettings?.next_payday?normalizePayday(paydaySettings):null;
   if(next){
-    const billItems=paydayBillsThrough(next),billTotal=billItems.reduce((s,b)=>s+Number(b.amount||0),0),income=Number(paydaySettings.usual_take_home||0);
+    // Mirror the Finance page's paycheck calculation, including recorded spending
+    // and any active bank-balance snapshot. Do not subtract spending twice.
+    const billItems=paydayBillsThrough(next),billTotal=billItems.reduce((s,b)=>s+Number(b.amount||0),0);
+    const snapshot=realityLoaded?activeRealityCheck(next):null;
+    const periodSpending=snapshot?postSnapshotSpending(snapshot):spendingThisPayPeriod(next);
+    const spentTotal=periodSpending.reduce((s,x)=>s+Number(x.amount||0),0);
+    const starting=snapshot?Number(snapshot.amount):Number(paydaySettings.usual_take_home||0);
     const savingsTotal=savingsGoals.filter(g=>Number(g.per_paycheck_amount||0)>0&&Number(g.current_amount||0)<Number(g.target_amount||0)).reduce((s,g)=>s+Number(g.per_paycheck_amount||0),0);
-    const lines=[["Next payday",prettyDate(isoLocal(next))],["Bills before payday",money(billTotal)],["Left after plans",money(income-billTotal-savingsTotal)]];
+    const lines=[["Next payday",prettyDate(isoLocal(next))],["Bills before payday",money(billTotal)],["Left after plans",money(starting-spentTotal-billTotal-savingsTotal)]];
     lines.forEach(([a,b])=>{const row=document.createElement("div");row.className="mini-line";const x=document.createElement("strong");x.textContent=a;const y=document.createElement("small");y.textContent=b;row.append(x,y);box.append(row)});
     if(!billItems.length){const q=document.createElement("div");q.className="muted";q.textContent=Math.random()<.5?"Bills handled. Future You says thanks. ✦":"Bills paid. Tiny financial victory dance authorized. ✦";box.append(q)}
   }else{box.className="empty";box.textContent="Set up Payday View when you're ready. No accounting degree required. ✦"}
