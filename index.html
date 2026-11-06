@@ -544,7 +544,7 @@ body[data-accent="red"]{--pink:#ff5c68}
     <div class="card dash-card planner-mischief" data-dashboard-card="chores"><h2>🧹 Today's Mischief <span>Chores & to-dos</span></h2>
       <p class="muted">One chore at a time. No guilt, no backlog. ✦</p>
       <div id="dashboardChores" class="empty">Loading your chaos…</div>
-      <div class="fresh-start-actions"><button type="button" id="previewFreshStart" class="linkbtn">✨ Fresh Start · Preview Shuffle</button></div>
+      
       <button class="linkbtn" data-go="housekeeping">Housekeeping →</button>
     </div>
     <div class="card dash-card planner-dates" data-dashboard-card="calendar"><h2>🔮 Dates with Destiny <span>Coming up</span></h2>
@@ -1818,31 +1818,63 @@ async function migrateLegacyChores(){
     try{await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({room_id:room.id,recurrence:taskRepeat(c),area})});c.room_id=room.id;c.recurrence=taskRepeat(c);c.area=area}catch(err){console.error("Legacy chore migration failed",c.id,err)}
   }
 }
-// v15.8.9: Catch up missed daily and every-other-day chores without marking them done.
-// Preserve the two-day cadence for every-other-day chores; do not change other recurrences.
+// Automatically move missed recurring chores to their next scheduled occurrence.
+// Keep the original cadence, never mark missed work completed, and leave one-time
+// tasks untouched. The next occurrence may be TODAY.
+function nextMissedChoreOccurrence(c){
+  const repeat=taskRepeat(c),original=c.due_date;
+  if(!original||original>=localDate||repeat==="none")return original;
+  const days={daily:1,every_other_day:2,weekly:7,biweekly:14};
+  const base=new Date(original+"T12:00:00"),today=new Date(localDate+"T12:00:00");
+  const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  let result;
+  if(days[repeat]){
+    const elapsed=Math.round((today-base)/86400000);
+    const steps=Math.max(0,Math.ceil(elapsed/days[repeat]));
+    result=new Date(base);result.setDate(base.getDate()+steps*days[repeat]);
+  }else{
+    const step={monthly:1,quarterly:3,semiannual:6,yearly:12}[repeat];
+    if(!step)return original;
+    const monthsApart=(today.getFullYear()-base.getFullYear())*12+today.getMonth()-base.getMonth();
+    let n=Math.max(0,Math.floor(monthsApart/step))*step;
+    const occurrence=offset=>{
+      const d=new Date(base);d.setDate(1);d.setMonth(base.getMonth()+offset);
+      const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+      d.setDate(Math.min(base.getDate(),last));return d;
+    };
+    result=occurrence(n);
+    while(result<today){n+=step;result=occurrence(n)}
+  }
+  // Seasonal chores remain scheduled only in their selected active seasons.
+  const seasons=choreSeasons(c);
+  if(seasons.length){
+    let guard=0;
+    while(!seasons.some(x=>seasonMonths[x]?.includes(result.getMonth()))&&guard++<1500){
+      if(days[repeat])result.setDate(result.getDate()+days[repeat]);
+      else{
+        const next=nextDue(fmt(result),repeat);
+        if(next===fmt(result))break;
+        result=new Date(next+"T12:00:00");
+      }
+    }
+  }
+  return fmt(result);
+}
 async function catchUpRoutineChores(){
   let failed=0;
   for(const c of chores){
-    if(c.completed || !c.due_date || c.due_date>=localDate)continue;
-    const repeat=taskRepeat(c);
-    if(repeat!=="daily" && repeat!=="every_other_day")continue;
-    let newDate=localDate;
-    if(repeat==="every_other_day"){
-      const start=new Date(c.due_date+"T12:00:00");
-      const end=new Date(localDate+"T12:00:00");
-      const days=Math.round((end-start)/86400000);
-      if(!Number.isFinite(days)||days<0)continue;
-      const steps=Math.ceil(days/2);
-      start.setDate(start.getDate()+steps*2);
-      newDate=`${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,"0")}-${String(start.getDate()).padStart(2,"0")}`;
-    }
-    if(newDate===c.due_date)continue;
+    if(c.completed||!c.due_date||c.due_date>=localDate)continue;
+    const newDate=nextMissedChoreOccurrence(c);
+    if(!newDate||newDate===c.due_date)continue;
     try{
-      await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({due_date:newDate})});
+      await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{
+        method:"PATCH",headers:{"Prefer":"return=minimal"},
+        body:JSON.stringify({due_date:newDate})
+      });
       c.due_date=newDate;
-    }catch(err){failed++;console.error("Routine chore catch-up failed",c.id,err)}
+    }catch(err){failed++;console.error("Automatic chore rollover failed",c.id,err)}
   }
-  if(failed)toast("Some routine chore dates couldn't be updated. Please try reloading later.");
+  if(failed)toast("Some chore dates couldn't roll forward. Please reload to retry.");
 }
 async function loadChores(){
   try{
