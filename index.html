@@ -241,6 +241,7 @@ input,select,textarea,button{max-width:100%}
 #paydaySpentList .mini-line{align-items:center;flex-wrap:wrap}
 #paydaySpentList .mini-line>span{flex:1 1 160px;overflow-wrap:anywhere}
 #paydaySpentList .mini-line>button{white-space:nowrap}
+.cc-whole-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin:10px 0}.cc-whole-grid label{display:flex;gap:6px;align-items:center;font-size:14px}.cc-whole-details{margin-top:8px;padding:8px;border:1px solid var(--teal);border-radius:10px}.cc-whole-details summary{cursor:pointer;font-size:13px}.cc-whole-details button{margin-top:8px}
 </style>
 <style>
 .savings-plan{margin-top:10px;padding:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.035)}
@@ -608,7 +609,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <form id="choreForm" class="chore-form">
         <label class="field chore-title-field">Chore<input id="choreTitle" required placeholder="e.g. Clean kitchen counters"></label>
         <label class="field">Area<select id="choreArea"><option value="inside">🏠 Inside</option><option value="outside">🌿 Outside</option></select></label>
-        <label class="field">Room / space<select id="choreRoom" required></select></label>
+        <label class="field">Room / space<select id="choreRoom" required></select></label><div id="addWholeRooms" class="cc-whole-picker" style="display:none;grid-column:1/-1;border:1px solid var(--teal);border-radius:12px;padding:12px"><strong>Select the spaces included</strong><p class="muted" style="margin:4px 0 8px">Check rooms individually later, or complete them all at once.</p><div id="addWholeRoomChecks" class="cc-whole-grid"></div></div>
         <label class="field">Repeat
           <select id="choreRepeat">
             <option value="none">One time</option><option value="daily">Daily</option><option value="every_other_day">Every other day</option><option value="weekly" selected>Weekly</option>
@@ -1014,7 +1015,7 @@ body[data-accent="red"]{--pink:#ff5c68}
       <input id="editChoreId" type="hidden">
       <label class="field">Chore<input id="editChoreTitle" required></label>
       <label class="field">Area<select id="editChoreArea"><option value="inside">🏠 Inside</option><option value="outside">🌿 Outside</option></select></label>
-      <label class="field">Room / space<select id="editChoreRoom"></select></label>
+      <label class="field">Room / space<select id="editChoreRoom"></select></label><div id="editWholeRooms" class="cc-whole-picker" style="display:none;grid-column:1/-1;border:1px solid var(--teal);border-radius:12px;padding:12px"><strong>Select the spaces included</strong><p class="muted" style="margin:4px 0 8px">Check rooms individually later, or complete them all at once.</p><div id="editWholeRoomChecks" class="cc-whole-grid"></div></div>
       <label class="field">Repeat<select id="editChoreRepeat">
         <option value="none">One time</option><option value="daily">Daily</option><option value="every_other_day">Every other day</option><option value="weekly">Weekly</option>
         <option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option><option value="quarterly">Every 3 months</option>
@@ -1483,6 +1484,49 @@ goalForm.addEventListener("submit",async e=>{
 
 
 // ---- Housekeeping / recurring chores + rooms (v7.2) ----
+// Whole-house selections and progress are stored in existing task descriptions;
+// no new tables, database privileges or SQL migrations are required.
+const wholeLabel={inside:"Whole House — Inside",outside:"Whole Property — Outside"};
+function wholeData(c){
+ const m=(c.description||"").match(/\[CC_WHOLE:([^\]]+)\]/);
+ if(!m)return null;
+ try{const o=JSON.parse(decodeURIComponent(m[1]));return Array.isArray(o.rooms)&&Array.isArray(o.done)?o:null}catch{return null}
+}
+function wholeDescription(description,data){
+ const base=(description||"").replace(/\s*\[CC_WHOLE:[^\]]*\]/g,"").trim();
+ return data?base+" [CC_WHOLE:"+encodeURIComponent(JSON.stringify(data))+"]":base;
+}
+function wholeRooms(area){return spaces.filter(s=>s.area===area&&s.active!==false&&!Object.values(wholeLabel).includes(s.name)).sort((a,b)=>a.name.localeCompare(b.name))}
+function wholePicker(prefix,area,selected){
+ const wrap=document.getElementById(prefix+"WholeRooms"),grid=document.getElementById(prefix+"WholeRoomChecks");
+ const select=document.getElementById(prefix==="add"?"choreRoom":"editChoreRoom");
+ const isWhole=select.value===wholeLabel[area];wrap.style.display=isWhole?"":"none";
+ if(!isWhole)return;
+ grid.innerHTML="";
+ for(const r of wholeRooms(area)){
+   const label=document.createElement("label"),box=document.createElement("input");box.type="checkbox";box.value=r.id;box.checked=selected?selected.includes(r.id):true;
+   label.append(box,document.createTextNode(" "+r.name));grid.append(label);
+ }
+}
+function pickedWhole(prefix,area){
+ const select=document.getElementById(prefix==="add"?"choreRoom":"editChoreRoom");
+ if(select.value!==wholeLabel[area])return null;
+ const rooms=[...document.querySelectorAll("#"+prefix+"WholeRoomChecks input:checked")].map(e=>e.value);
+ if(!rooms.length)throw Error("Select at least one room or space.");
+ return {rooms,done:[]};
+}
+function wholeRoomName(id){return roomById(id)?.name||"Removed space"}
+async function saveWholeProgress(c,done){
+ const data=wholeData(c);if(!data)return;
+ const updated={rooms:data.rooms,done:[...new Set(done)].filter(id=>data.rooms.includes(id))};
+ const finished=updated.rooms.length>0&&updated.done.length===updated.rooms.length;
+ const patch={description:wholeDescription(c.description,finished?{rooms:data.rooms,done:[]}:updated)};
+ if(finished){if(taskRepeat(c)!=="none"){patch.due_date=nextSeasonalDue(c.due_date||localDate,taskRepeat(c),choreSeasons(c));patch.completed=false}else patch.completed=true}
+ else patch.completed=false;
+ await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify(patch)});
+ Object.assign(c,patch);renderChores();toast(finished?"Whole chore complete! ✨":"Room progress saved.");
+}
+
 let chores=[];
 let choreFilter="all";
 const defaultSpaces=[
@@ -1495,7 +1539,7 @@ const defaultSpaces=[
 let spaces=[],manualFocus="",housekeepingSettings=null;
 function taskRepeat(c){if(c.recurrence)return c.recurrence;const m=(c.description||"").match(/\[CC_REPEAT:([^\]]+)\]/);return m?m[1]:(c.recurring?"weekly":"none")}
 function roomById(id){return spaces.find(s=>s.id===id)}
-function taskRoom(c){const linked=roomById(c.room_id);if(linked)return linked.name;const m=(c.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
+function taskRoom(c){if(wholeData(c))return wholeLabel[taskArea(c)];const linked=roomById(c.room_id);if(linked)return linked.name;const m=(c.description||"").match(/\[CC_ROOM:([^\]]*)\]/);return m?m[1]:""}
 function taskArea(c){const linked=roomById(c.room_id);if(linked)return linked.area;if(c.area)return c.area;const m=(c.description||"").match(/\[CC_AREA:([^\]]+)\]/);return m?m[1]:"inside"}
 function taskDescription(room,repeat,area="inside"){return `[CC_ROOM:${room}] [CC_REPEAT:${repeat}] [CC_AREA:${area}]`}
 // Seasonal metadata is stored alongside existing task metadata in Supabase's description field.
@@ -1542,11 +1586,14 @@ function recurrenceLabel(value){return ({none:"One time",daily:"Daily",every_oth
 function rotationFocus(){const r=roomById(housekeepingSettings?.focus_room_id);return r?.name||""}
 function fillRoomSelect(select,area,value=""){
   const choices=spaces.filter(s=>s.area===area&&s.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)||a.name.localeCompare(b.name));
-  select.innerHTML="";choices.forEach(s=>{const o=document.createElement("option");o.value=s.name;o.dataset.roomId=s.id;o.textContent=s.name;select.append(o)});
-  if(value)select.value=value;
+  select.innerHTML="";const wholeOption=document.createElement("option");wholeOption.value=wholeLabel[area];wholeOption.textContent=(area==="outside"?"🌿 ":"🏠 ")+wholeLabel[area];select.append(wholeOption);choices.forEach(s=>{const o=document.createElement("option");o.value=s.name;o.dataset.roomId=s.id;o.textContent=s.name;select.append(o)});
+  if(value)select.value=value;else if(choices.length)select.value=choices[0].name;
+ if(select.id==="choreRoom")wholePicker("add",area);if(select.id==="editChoreRoom")wholePicker("edit",area);
 }
 function selectedRoomId(select){return select.selectedOptions[0]?.dataset.roomId||null}
 function renderRoomSuggestions(){fillRoomSelect(document.getElementById("choreRoom"),document.getElementById("choreArea").value)}
+document.getElementById("choreRoom").addEventListener("change",()=>wholePicker("add",document.getElementById("choreArea").value));
+document.getElementById("editChoreRoom").addEventListener("change",()=>wholePicker("edit",document.getElementById("editChoreArea").value));
 async function seedDefaultSpaces(){
   if(spaces.length)return;
   const rows=defaultSpaces.map((s,i)=>({user_id:currentUser.id,name:s.name,area:s.area,sort_order:i,active:true}));
@@ -1756,12 +1803,27 @@ function choreRow(c){
   const meta=document.createElement("div");meta.className="chore-meta";
   meta.textContent=(room?(taskArea(c)==="outside"?"🌿 ":"🏠 ")+room+" · ":"")+(c.due_date?"Due "+prettyDate(c.due_date):"No due date")+" · "+recurrenceLabel(repeat)+(choreSeasons(c).length?" · "+seasonText(c)+(activeSeason(c)?"":" · Hibernating"):"");
   main.append(title,meta);
+  const whole=wholeData(c);
+  if(whole){
+    const details=document.createElement("details");details.className="cc-whole-details";
+    const summary=document.createElement("summary");summary.textContent="Rooms completed: "+whole.done.length+" / "+whole.rooms.length+" · Expand";details.append(summary);
+    const grid=document.createElement("div");grid.className="cc-whole-grid";
+    for(const id of whole.rooms){
+      const label=document.createElement("label"),input=document.createElement("input");input.type="checkbox";input.checked=whole.done.includes(id);input.disabled=!!c.completed;
+      input.addEventListener("change",async()=>{input.disabled=true;try{const current=wholeData(c);const next=input.checked?[...current.done,id]:current.done.filter(x=>x!==id);await saveWholeProgress(c,next)}catch(err){console.error(err);input.checked=!input.checked;toast("Couldn't save room progress.")}finally{input.disabled=false}});
+      label.append(input,document.createTextNode(" "+wholeRoomName(id)));grid.append(label);
+    }
+    const all=document.createElement("button");all.type="button";all.textContent="✓ Complete all rooms";all.className="primary";
+    all.addEventListener("click",async()=>{all.disabled=true;try{await saveWholeProgress(c,whole.rooms)}catch(err){console.error(err);toast("Couldn't complete the chore.")}finally{all.disabled=false}});
+    details.append(grid,all);main.append(details);
+  }
   const actions=document.createElement("div");actions.className="chore-actions";
   const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";
   const del=document.createElement("button");del.type="button";del.textContent="Remove";actions.append(edit,del);
   check.addEventListener("change",async()=>{
     check.disabled=true;
     try{
+      if(whole&&check.checked){await saveWholeProgress(c,whole.rooms);return}
       if(check.checked&&repeat!=="none"){
         const nd=nextSeasonalDue(c.due_date||today,repeat,choreSeasons(c));
         await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(c.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({completed:false,due_date:nd})});
@@ -1887,7 +1949,8 @@ async function loadChores(){
 choreForm.addEventListener("submit",async e=>{
   e.preventDefault();if(!currentUser){toast("Please sign in first.");return}
   const title=document.getElementById("choreTitle").value.trim(),area=document.getElementById("choreArea").value,roomSelect=document.getElementById("choreRoom"),room=roomSelect.value,room_id=selectedRoomId(roomSelect),repeat=document.getElementById("choreRepeat").value,due=document.getElementById("choreDue").value;
-  try{await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,description:seasonalDescription(taskDescription(room,repeat,area),pickedSeasons("addChoreSeasons")),due_date:due,completed:false,recurring:repeat!=="none",room_id,recurrence:repeat,area})})}
+  let whole;try{whole=pickedWhole("add",area)}catch(err){toast(err.message);return}
+  try{await supabaseRequest("/rest/v1/tasks",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({user_id:currentUser.id,title,description:wholeDescription(seasonalDescription(taskDescription(room,repeat,area),pickedSeasons("addChoreSeasons")),whole),due_date:due,completed:false,recurring:repeat!=="none",room_id:whole?null:room_id,recurrence:repeat,area})})}
   catch(err){console.error("Chore save failed",err);toast("Couldn't save chore: "+(err.message||"unknown error"));return}
   choreForm.reset();document.getElementById("choreArea").value="inside";fillRoomSelect(document.getElementById("choreRoom"),"inside");choreDue.value=localDate;document.getElementById("choreRepeat").value="weekly";await loadChores();toast("Chore added!");
 });
@@ -1901,7 +1964,7 @@ const choreEditModal=document.getElementById("choreEditModal");
 function openChoreEdit(c){
   document.getElementById("editChoreId").value=c.id;document.getElementById("editChoreTitle").value=c.title;
   document.getElementById("editChoreArea").value=taskArea(c);
-  fillRoomSelect(document.getElementById("editChoreRoom"),taskArea(c),taskRoom(c));document.getElementById("editChoreRepeat").value=taskRepeat(c);
+  fillRoomSelect(document.getElementById("editChoreRoom"),taskArea(c),taskRoom(c));wholePicker("edit",taskArea(c),wholeData(c)?.rooms);document.getElementById("editChoreRepeat").value=taskRepeat(c);
   document.getElementById("editChoreDue").value=c.due_date||localDate;setPickedSeasons("editChoreSeasons",choreSeasons(c));choreEditModal.classList.add("open");choreEditModal.setAttribute("aria-hidden","false")
 }
 function closeChoreEdit(){choreEditModal.classList.remove("open");choreEditModal.setAttribute("aria-hidden","true")}
@@ -1910,8 +1973,11 @@ choreEditModal.addEventListener("click",e=>{if(e.target===choreEditModal)closeCh
 document.getElementById("choreEditForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const id=document.getElementById("editChoreId").value,title=document.getElementById("editChoreTitle").value.trim(),area=document.getElementById("editChoreArea").value,roomSelect=document.getElementById("editChoreRoom"),room=roomSelect.value,room_id=selectedRoomId(roomSelect),repeat=document.getElementById("editChoreRepeat").value,due=document.getElementById("editChoreDue").value;
+  let whole;try{whole=pickedWhole("edit",area)}catch(err){toast(err.message);return}
+  const old=chores.find(c=>String(c.id)===String(id)),oldWhole=old&&wholeData(old);
+  if(whole&&oldWhole)whole.done=oldWhole.done.filter(x=>whole.rooms.includes(x));
   try{
-    await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description:seasonalDescription(taskDescription(room,repeat,area),pickedSeasons("editChoreSeasons")),due_date:due,recurring:repeat!=="none",room_id,recurrence:repeat,area})});
+    await supabaseRequest("/rest/v1/tasks?id=eq."+encodeURIComponent(id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({title,description:wholeDescription(seasonalDescription(taskDescription(room,repeat,area),pickedSeasons("editChoreSeasons")),whole),due_date:due,recurring:repeat!=="none",room_id:whole?null:room_id,recurrence:repeat,area})});
     closeChoreEdit();await loadChores();toast("Chore updated.")
   }catch(err){console.error(err);toast("Couldn't save those changes.")}
 });
