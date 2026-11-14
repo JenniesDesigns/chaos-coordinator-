@@ -3552,6 +3552,8 @@ function printPlannerDay(){
   const due=(typeof chores!=='undefined'?chores:[]).filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=dayISO));
   const todaysEvents=(typeof events!=='undefined'?events:[]).filter(e=>String(e.event_date||'').slice(0,10)===dayISO);
   const meals=(typeof mealForDate==='function'?mealForDate(dayISO):null);
+  const openReminders=(typeof ccReminders!=='undefined'?ccReminders:[]).filter(r=>!r.completed).sort((a,b)=>(a.due_date||'9999-12-31').localeCompare(b.due_date||'9999-12-31')||(a.created_at||'').localeCompare(b.created_at||''));
+  const openCalls=(typeof ccCalls!=='undefined'?ccCalls:[]).filter(c=>!c.completed).sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
   const entries=(arr,fn,limit=16)=>arr.slice(0,limit).map(v=>'<li><span class="check"></span>'+esc(fn(v))+'</li>').join('')+(arr.length>limit?'<li class="more">+ '+(arr.length-limit)+' more in the app</li>':'');
   const blank=(n=3)=>Array.from({length:n},()=>'<li class="blank"><span class="check"></span>&nbsp;</li>').join('');
   const block=(title,contents,more=3,cls='')=>'<section class="panel '+cls+'"><h2>'+title+'</h2><ul>'+contents+blank(more)+'</ul></section>';
@@ -3560,8 +3562,8 @@ function printPlannerDay(){
     block('Today’s Mischief · Chores & To-Dos',entries(due,c=>c.title+(taskRoom(c)?' · '+taskRoom(c):''),due.length),3)+
     '</div><div class="stack">'+
     block('Dates with Destiny · Appointments',entries(todaysEvents,eventLabel),2)+
-    block('Don’t Forget Your Spells · Reminders','',3)+
-    block('Summon Your People · Calls & Follow-Ups','',3)+
+    block('Don’t Forget Your Spells · Reminders',entries(openReminders,r=>r.title||'Reminder'),3)+
+    block('Summon Your People · Calls & Follow-Ups',entries(openCalls,c=>c.title||'Call'),3)+
     block('The Cauldron · Meals',meals?.meal?'<li>'+esc(meals.meal)+'</li>':'',2)+
     '</div></div><div class="footer">Coordinated-ish — because perfect was never the goal. · Blank lines are for handwritten additions.</div></div><script>window.addEventListener("load",function(){var sheet=document.getElementById("printSheet");var maxHeight=(11-.72)*96;var actual=sheet.getBoundingClientRect().height;if(actual>maxHeight){var factor=maxHeight/actual*.96;sheet.style.zoom=String(factor)}});<\/script></body></html>';
   const win=window.open('','_blank','width=850,height=950');
