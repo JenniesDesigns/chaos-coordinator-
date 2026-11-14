@@ -499,8 +499,23 @@ body[data-accent="red"]{--pink:#ff5c68}
         <button class="primary" id="authSubmit" type="submit">Sign in</button>
         <button class="linkbtn" id="createSubmit" type="button" style="border:1px solid #42e0d077;border-radius:10px;padding:10px 13px">Create account</button>
       </div>
+      <button class="linkbtn" id="forgotPasswordBtn" type="button"
+        style="display:block;margin:10px 0 0 auto;width:auto;text-align:right">
+        Forgot password?
+      </button>
     </form>
-    <div class="auth-msg" id="authMsg"></div>
+    <form id="resetPasswordForm" hidden style="display:none">
+      <label>New password
+        <input id="resetNewPassword" type="password" autocomplete="new-password"
+          minlength="6" required placeholder="At least 6 characters">
+      </label>
+      <label>Confirm new password
+        <input id="resetConfirmPassword" type="password" autocomplete="new-password"
+          minlength="6" required placeholder="Enter it again">
+      </label>
+      <button class="primary" id="resetPasswordSubmit" type="submit">Save new password</button>
+    </form>
+    <div class="auth-msg" id="authMsg" role="status" aria-live="polite"></div>
     <div style="margin-top:14px;color:#68728a;font-size:10px;text-align:center">Chaos Coordinator · v15.7.1 · Grocery Categories & Compact Print</div>
   </div>
 </div>
@@ -3289,6 +3304,102 @@ async function doSignIn(){
     createSubmit.disabled=false; authSubmit.disabled=false;
   }
 }
+// Password recovery: use the existing Supabase REST client and hosted app URL.
+const CC_RECOVERY_URL = "https://jenniesdesigns.github.io/chaos-coordinator-/";
+const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
+const resetPasswordForm = document.getElementById("resetPasswordForm");
+let ccRecoveryToken = null;
+
+forgotPasswordBtn.addEventListener("click", async () => {
+  const email = document.getElementById("authEmail").value.trim();
+  if (!email || !document.getElementById("authEmail").checkValidity()) {
+    setAuthMessage("Enter your email address above first.", true);
+    document.getElementById("authEmail").focus();
+    return;
+  }
+  forgotPasswordBtn.disabled = true;
+  try {
+    await supabaseRequest("/auth/v1/recover?redirect_to=" + encodeURIComponent(CC_RECOVERY_URL), {
+      method: "POST",
+      body: JSON.stringify({email})
+    }, false);
+    setAuthMessage("If that email has an account, a password-reset link will arrive shortly. Check your inbox and spam folder.");
+  } catch (err) {
+    console.error("Password recovery request failed", err);
+    setAuthMessage("Could not request a reset: " + (err.message || String(err)), true);
+  } finally {
+    forgotPasswordBtn.disabled = false;
+  }
+});
+
+async function ccHandleRecoveryLink() {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const query = new URLSearchParams(location.search);
+  const isRecovery = fragment.get("type") === "recovery" || query.get("type") === "recovery";
+  if (!isRecovery) return false;
+  // Clear URL tokens immediately; never leave credentials in browser history.
+  history.replaceState(null, "", location.pathname);
+  const token = fragment.get("access_token");
+  if (!token) {
+    setAuthMessage("This recovery link is invalid or expired. Request another one.", true);
+    return true;
+  }
+  try {
+    // Verify that the supplied token is valid before displaying the reset form.
+    const response = await fetch(SUPABASE_URL + "/auth/v1/user", {
+      headers: {apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + token}
+    });
+    if (!response.ok) throw new Error("This recovery link is invalid or expired.");
+    ccRecoveryToken = token;
+    clearSession();
+    document.getElementById("authHeading").textContent = "Choose a new password.";
+    document.getElementById("authIntro").textContent = "Enter and confirm your new password.";
+    authForm.style.display = "none";
+    resetPasswordForm.style.display = "block";
+    setAuthMessage("");
+  } catch (err) {
+    ccRecoveryToken = null;
+    setAuthMessage(err.message || "This recovery link is invalid or expired.", true);
+  }
+  return true;
+}
+
+resetPasswordForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  const password = document.getElementById("resetNewPassword").value;
+  const confirm = document.getElementById("resetConfirmPassword").value;
+  if (password.length < 6) return setAuthMessage("Use at least 6 characters.", true);
+  if (password !== confirm) return setAuthMessage("The passwords do not match.", true);
+  if (!ccRecoveryToken) return setAuthMessage("Recovery link expired. Request a new one.", true);
+  const button = document.getElementById("resetPasswordSubmit");
+  button.disabled = true;
+  try {
+    const response = await fetch(SUPABASE_URL + "/auth/v1/user", {
+      method: "PUT",
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: "Bearer " + ccRecoveryToken,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({password})
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.msg || result.message || result.error_description || "Could not update password.");
+    ccRecoveryToken = null;
+    clearSession();
+    resetPasswordForm.reset();
+    resetPasswordForm.style.display = "none";
+    authForm.style.display = "";
+    document.getElementById("authHeading").textContent = "Welcome back.";
+    document.getElementById("authIntro").textContent = "Sign in to your Chaos Coordinator account.";
+    setAuthMessage("Password updated! Please sign in with your new password.");
+  } catch (err) {
+    setAuthMessage("Password reset failed: " + (err.message || String(err)), true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 authForm.addEventListener("submit",e=>{e.preventDefault();doSignIn();});
 createSubmit.addEventListener("click",e=>{e.preventDefault();doCreateAccount();});
 
@@ -3487,8 +3598,14 @@ if(mealMobileToggle)mealMobileToggle.addEventListener("click",()=>{
   const card=mealMobileToggle.closest(".meal-plan-card"),open=card.classList.toggle("meal-open");
   mealMobileToggle.setAttribute("aria-expanded",String(open));
 });
-const restored=restoreSession();
-if(restored?.user) startApp(restored.user);
+// Recovery links take precedence over any previously saved session.
+const ccRecoveryPending = location.hash.includes("type=recovery") || new URLSearchParams(location.search).get("type") === "recovery";
+if (ccRecoveryPending) {
+  ccHandleRecoveryLink();
+} else {
+  const restored=restoreSession();
+  if(restored?.user) startApp(restored.user);
+}
 
 
 
