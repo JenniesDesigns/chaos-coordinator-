@@ -571,7 +571,7 @@ body[data-accent="red"]{--pink:#ff5c68}
     </div>
     <div class="card planner-extra cc-dashboard-groceries"><h2>🛒 Supply Run <span>Groceries & errands</span></h2><form id="dashboardGroceryForm" class="cc-reminder-form"><input id="dashboardGroceryInput" maxlength="120" aria-label="Quick add grocery item" placeholder="Add a grocery item, press Enter…" required autocomplete="off"></form><div id="dashboardSupply" class="cc-reminder-list" aria-live="polite">Loading shopping list…</div><button class="linkbtn" data-go="groceries">Grocery List →</button></div>
   </div>
-  <div class="planner-print-toolbar"><span id="plannerDate"></span><button type="button" id="printMyDay" class="primary">🖨 Print My Day</button></div>
+  <div class="planner-print-toolbar"><span id="plannerDate"></span><span style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="printMyDay" class="primary">🖨 Print My Day</button><button type="button" id="printWeeklyMenu" class="primary">🍽 Print Weekly Menu</button></span></div>
   <div class="dashboard-secondary">
     <div class="card mini-dash" data-dashboard-card="projects"><h2>⚒ Projects <span>In motion</span></h2><div id="dashboardProjects" class="mini-list">Loading projects…</div><button class="linkbtn" data-go="projects">Projects →</button></div>
     <div class="card mini-dash" data-dashboard-card="goals"><h2>◎ Goals <span>Keep going</span></h2><div id="dashboardGoals" class="mini-list">Loading goals…</div><button class="linkbtn" data-go="goals">Goals →</button></div>
@@ -3577,6 +3577,29 @@ function printPlannerDay(){
   win.document.open();win.document.write(html);win.document.close();win.focus();
   setTimeout(()=>win.print(),500);
 }
+// Separate, ink-friendly weekly menu. Reads the same mealPlans data as the dashboard.
+function printWeeklyMenu(){
+  const dates=mealWeekDates(0);
+  const safe=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const start=dates[0].toLocaleDateString(undefined,{month:'long',day:'numeric'});
+  const end=dates[6].toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'});
+  const rows=dates.map(d=>{
+    const meal=mealForDate(mealLocalISO(d));
+    const weekday=d.toLocaleDateString(undefined,{weekday:'long'});
+    const date=d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    return `<div class="menu-row"><div class="day"><strong>${safe(weekday)}</strong><small>${safe(date)}</small></div><div class="dish">${safe(meal?.meal||'Wing it. ✦')}</div></div>`;
+  }).join('');
+  const ingredientLines=Array.from({length:11},()=>'<div class="write-line"><span class="check"></span></div>').join('');
+  const noteLines=Array.from({length:6},()=>'<div class="note-line"></div>').join('');
+  const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Coordinated-ish · Weekly Menu</title><style>
+  @page{size:letter;margin:.55in}*{box-sizing:border-box}body{margin:0;background:#fff;color:#232323;font-family:Georgia,'Times New Roman',serif}main{max-width:7.35in;margin:auto;border:2px solid #252525;padding:17px 23px 14px;min-height:9.7in}.ornament{text-align:center;font-size:14px;letter-spacing:7px}.eyebrow{text-align:center;font:700 10px Arial,sans-serif;letter-spacing:3px;text-transform:uppercase;margin-top:12px}h1{text-align:center;font-size:34px;letter-spacing:1px;font-weight:normal;margin:4px 0}.dates{text-align:center;font:12px Arial,sans-serif;margin-bottom:16px}.rule{border-top:1px solid #444;margin:0 0 10px}.menu-row{display:grid;grid-template-columns:125px 1fr;gap:12px;align-items:center;border-bottom:1px solid #ccc;min-height:43px;padding:5px 3px}.day strong{display:block;font-size:14px}.day small{font:10px Arial,sans-serif;color:#555}.dish{font-size:15px;overflow-wrap:anywhere}.bottom{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:18px}.bottom h2{font-size:17px;font-weight:normal;margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid #444}.write-line{height:25px;border-bottom:1px solid #bbb;display:flex;align-items:center}.check{width:10px;height:10px;border:1px solid #555;margin-right:8px}.note-line{height:27px;border-bottom:1px solid #bbb}.foot{text-align:center;font:9px Arial,sans-serif;color:#666;margin-top:15px}.actions{text-align:center;margin:16px}.actions button{font:14px Arial,sans-serif;padding:10px 20px;cursor:pointer}@media print{.actions{display:none}main{border:2px solid #252525;min-height:9.7in}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}@media(max-width:550px){main{min-height:0;padding:14px}.bottom{gap:12px}.menu-row{grid-template-columns:90px 1fr}h1{font-size:28px}}
+  </style></head><body><div class="actions"><button onclick="window.print()">Print Weekly Menu</button></div><main><div class="ornament">✦ ❧ ✦</div><div class="eyebrow">The Cauldron Presents</div><h1>This Week's Menu</h1><div class="dates">${safe(start)} – ${safe(end)}</div><div class="rule"></div>${rows}<div class="bottom"><section><h2>Shopping Ingredients</h2>${ingredientLines}</section><section><h2>Notes &amp; Substitutions</h2>${noteLines}</section></div><div class="foot">Coordinated-ish ♡ · A little planning, a little magic, and plenty of room to wing it.</div></main></body></html>`;
+  const win=window.open('','_blank','width=850,height=950');
+  if(!win){toast('Allow pop-ups to print your weekly menu.');return}
+  win.document.open();win.document.write(html);win.document.close();win.focus();
+}
+const printWeeklyMenuButton=document.getElementById('printWeeklyMenu');
+if(printWeeklyMenuButton)printWeeklyMenuButton.addEventListener('click',printWeeklyMenu);
 const printMyDayButton=document.getElementById('printMyDay');
 if(printMyDayButton)printMyDayButton.addEventListener('click',printPlannerDay);
 // Update the planner's grocery preview when the dashboard is rendered.
