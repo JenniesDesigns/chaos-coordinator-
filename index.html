@@ -482,6 +482,21 @@ body[data-accent="red"]{--pink:#ff5c68}
 .auth-msg{min-height:22px;margin-top:12px;color:#42e0d0;font-size:13px}.auth-error{color:#ff9cdb}
 #signOutBtn{border:1px solid var(--line);background:#192238;color:var(--muted);border-radius:8px;padding:6px 9px;font-size:11px;margin-left:6px}
 
+
+/* Password visibility toggles: sign-in and recovery only. */
+.cc-password-wrap{position:relative;display:block}
+.auth-card .cc-password-wrap input{padding-right:52px}
+.auth-card .cc-password-eye{
+  position:absolute;right:5px;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:center;
+  width:42px;height:42px;margin:0;padding:0;
+  border:0;border-radius:8px;background:transparent;color:#d6deef;
+  cursor:pointer;z-index:1
+}
+.auth-card .cc-password-eye:hover,.auth-card .cc-password-eye:focus-visible{
+  background:#ffffff15;color:#fff
+}
+
 /* v10.1: view isolation — keep section content on its own screen on mobile */
 .view:not(.active){display:none !important}
 .view.active{display:block}
@@ -494,7 +509,7 @@ body[data-accent="red"]{--pink:#ff5c68}
     <p id="authIntro">Sign in to your Chaos Coordinator account.</p>
     <form id="authForm">
       <label>Email <input id="authEmail" type="email" autocomplete="email" required placeholder="you@example.com"></label>
-      <label>Password <input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="At least 6 characters"></label>
+      <label>Password <span class="cc-password-wrap"><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="At least 6 characters"><button type="button" class="cc-password-eye" data-password-target="authPassword" aria-label="Show password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
         <button class="primary" id="authSubmit" type="submit">Sign in</button>
         <button class="linkbtn" id="createSubmit" type="button" style="border:1px solid #42e0d077;border-radius:10px;padding:10px 13px">Create account</button>
@@ -506,12 +521,12 @@ body[data-accent="red"]{--pink:#ff5c68}
     </form>
     <form id="resetPasswordForm" hidden style="display:none">
       <label>New password
-        <input id="resetNewPassword" type="password" autocomplete="new-password"
-          minlength="6" required placeholder="At least 6 characters">
+        <span class="cc-password-wrap"><input id="resetNewPassword" type="password" autocomplete="new-password"
+          minlength="6" required placeholder="At least 6 characters"><button type="button" class="cc-password-eye" data-password-target="resetNewPassword" aria-label="Show password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></span>
       </label>
       <label>Confirm new password
-        <input id="resetConfirmPassword" type="password" autocomplete="new-password"
-          minlength="6" required placeholder="Enter it again">
+        <span class="cc-password-wrap"><input id="resetConfirmPassword" type="password" autocomplete="new-password"
+          minlength="6" required placeholder="Enter it again"><button type="button" class="cc-password-eye" data-password-target="resetConfirmPassword" aria-label="Show password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></span>
       </label>
       <button class="primary" id="resetPasswordSubmit" type="submit">Save new password</button>
     </form>
@@ -3304,6 +3319,21 @@ async function doSignIn(){
     createSubmit.disabled=false; authSubmit.disabled=false;
   }
 }
+
+// Reveal or hide a password without changing its value or submitting the form.
+document.querySelectorAll(".cc-password-eye").forEach(button => {
+  button.addEventListener("click", () => {
+    const input = document.getElementById(button.dataset.passwordTarget);
+    if (!input) return;
+    const showing = input.type === "password";
+    input.type = showing ? "text" : "password";
+    button.setAttribute("aria-pressed", String(showing));
+    button.setAttribute("aria-label", showing ? "Hide password" : "Show password");
+    button.title = showing ? "Hide password" : "Show password";
+    button.style.color = showing ? "#42e0d0" : "";
+  });
+});
+
 // Password recovery: use the existing Supabase REST client and hosted app URL.
 const CC_RECOVERY_URL = "https://jenniesdesigns.github.io/chaos-coordinator-/";
 const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
