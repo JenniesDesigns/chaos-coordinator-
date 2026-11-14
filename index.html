@@ -3550,21 +3550,27 @@ function printPlannerDay(){
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const today=new Date(),dayISO=typeof localDate==='string'?localDate:today.toISOString().slice(0,10);
   const due=(typeof chores!=='undefined'?chores:[]).filter(c=>!c.completed&&activeSeason(c)&&(!c.due_date||c.due_date<=dayISO));
-  const todaysEvents=(typeof events!=='undefined'?events:[]).filter(e=>String(e.event_date||'').slice(0,10)===dayISO);
+  // Match the dashboard's upcoming-appointments window (today through 30 days ahead).
+  const appointmentEnd=new Date(dayISO+'T12:00:00');
+  appointmentEnd.setDate(appointmentEnd.getDate()+30);
+  const appointmentEndISO=appointmentEnd.getFullYear()+'-'+String(appointmentEnd.getMonth()+1).padStart(2,'0')+'-'+String(appointmentEnd.getDate()).padStart(2,'0');
+  const todaysEvents=(typeof events!=='undefined'?events:[])
+    .filter(e=>{const d=String(e.event_date||'').slice(0,10);return d>=dayISO&&d<=appointmentEndISO})
+    .sort((a,b)=>((a.event_date||'')+' '+(a.event_time||'')).localeCompare((b.event_date||'')+' '+(b.event_time||'')));
   const meals=(typeof mealForDate==='function'?mealForDate(dayISO):null);
   const openReminders=(typeof ccReminders!=='undefined'?ccReminders:[]).filter(r=>!r.completed).sort((a,b)=>(a.due_date||'9999-12-31').localeCompare(b.due_date||'9999-12-31')||(a.created_at||'').localeCompare(b.created_at||''));
   const openCalls=(typeof ccCalls!=='undefined'?ccCalls:[]).filter(c=>!c.completed).sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
   const entries=(arr,fn,limit=16)=>arr.slice(0,limit).map(v=>'<li><span class="check"></span>'+esc(fn(v))+'</li>').join('')+(arr.length>limit?'<li class="more">+ '+(arr.length-limit)+' more in the app</li>':'');
   const blank=(n=3)=>Array.from({length:n},()=>'<li class="blank"><span class="check"></span>&nbsp;</li>').join('');
   const block=(title,contents,more=3,cls='')=>'<section class="panel '+cls+'"><h2>'+title+'</h2><ul>'+contents+blank(more)+'</ul></section>';
-  const eventLabel=e=>[e.event_time||'',e.title||e.name||'Event'].filter(Boolean).join(' · ');
+  const eventLabel=e=>[String(e.event_date||'').slice(0,10),e.event_time||'',e.title||e.name||'Event'].filter(Boolean).join(' · ');
   const html='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Chaos Coordinator — My Day</title><style>'+`@page{size:letter;margin:.36in}*{box-sizing:border-box}html,body{margin:0;padding:0}body{font:10px/1.18 Arial,sans-serif;color:#151515}#printSheet{width:100%}header{display:flex;justify-content:space-between;align-items:end;border-bottom:2px solid #111;padding-bottom:5px;margin-bottom:7px}h1{font-size:19px;margin:0}header p{margin:0;font-size:10px}.grid{display:grid;grid-template-columns:1.12fr 1fr;gap:8px;align-items:start}.stack{display:flex;flex-direction:column;gap:7px;min-width:0}.panel{border:1px solid #333;border-radius:6px;padding:6px 8px;break-inside:avoid}.panel h2{font-size:11px;margin:0 0 4px;border-bottom:1px solid #bbb;padding-bottom:3px}.panel ul{list-style:none;padding:0;margin:0}.panel li{display:flex;gap:5px;align-items:baseline;min-height:16px;padding:1px 0;overflow-wrap:anywhere}.panel li.blank{border-bottom:1px solid #ddd}.panel li.more{font-style:italic;color:#555}.check{display:inline-block;flex:0 0 9px;height:9px;border:1px solid #555}.footer{margin-top:6px;text-align:center;font-size:8px;color:#555}@media print{button{display:none}#printSheet{break-inside:avoid}}`+'</style></head><body><div id="printSheet"><header><div><h1>Chaos Coordinator ♡</h1><p>You bring the chaos. We’ll coordinate it.</p></div><strong>'+esc(today.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}))+'</strong></header><div class="grid"><div class="stack">'+
     block('Today’s Mischief · Chores & To-Dos',entries(due,c=>c.title+(taskRoom(c)?' · '+taskRoom(c):''),due.length),3)+
     '</div><div class="stack">'+
-    block('Dates with Destiny · Appointments',entries(todaysEvents,eventLabel),2)+
+    block('Dates with Destiny · Upcoming Appointments',entries(todaysEvents,eventLabel),2)+
     block('Don’t Forget Your Spells · Reminders',entries(openReminders,r=>r.title||'Reminder'),3)+
     block('Summon Your People · Calls & Follow-Ups',entries(openCalls,c=>c.title||'Call'),3)+
-    block('The Cauldron · Meals',meals?.meal?'<li>'+esc(meals.meal)+'</li>':'',2)+
+    block('The Cauldron · Today’s Meal','<li>'+esc(meals?.meal||'Wing it. ✦')+'</li>',2)+
     '</div></div><div class="footer">Coordinated-ish — because perfect was never the goal. · Blank lines are for handwritten additions.</div></div><script>window.addEventListener("load",function(){var sheet=document.getElementById("printSheet");var maxHeight=(11-.72)*96;var actual=sheet.getBoundingClientRect().height;if(actual>maxHeight){var factor=maxHeight/actual*.96;sheet.style.zoom=String(factor)}});<\/script></body></html>';
   const win=window.open('','_blank','width=850,height=950');
   if(!win){toast('Allow pop-ups to print your planner.');return}
